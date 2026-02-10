@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>检查帖子详情</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; }
+    .post-card {
+      background: #f8f9fa;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 12px 0;
+      border-left: 4px solid #ddd;
+    }
+    .post-card.problem {
+      border-left-color: #ef4444;
+      background: #fee2e2;
+    }
+    .post-card.ok {
+      border-left-color: #10b981;
+      background: #d1fae5;
+    }
+    .post-header {
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .post-detail {
+      font-size: 13px;
+      margin: 4px 0;
+      font-family: monospace;
+    }
+    .label {
+      color: #666;
+    }
+    .value {
+      color: #333;
+      font-weight: 600;
+    }
+    .btn {
+      padding: 12px 24px;
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 12px;
+    }
+    .btn:hover { background: #0284c7; }
+    .btn-success {
+      background: #10b981;
+    }
+    .btn-success:hover { background: #059669; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 帖子数据详情检查</h1>
+
+    <button class="btn" onclick="showDetails()">📊 显示详情</button>
+    <button class="btn btn-success" onclick="fixAll()">🔧 一键修复全部</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    function showDetails() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+
+      let html = `<strong>共 ${posts.length} 个帖子：</strong><br><br>`;
+
+      posts.forEach((post, index) => {
+        const hasProblem = !post.createdAt || post.createdAt === '刚刚' || isNaN(new Date(post.createdAt).getTime());
+        const cardClass = hasProblem ? 'post-card problem' : 'post-card ok';
+        const status = hasProblem ? '❌ 有问题' : '✅ 正常';
+
+        html += `<div class="${cardClass}">`;
+        html += `<div class="post-header">#${index + 1} ${status}</div>`;
+        html += `<div class="post-detail"><span class="label">帖子ID:</span> <span class="value">${post._id}</span></div>`;
+        html += `<div class="post-detail"><span class="label">内容:</span> <span class="value">${post.content?.substring(0, 40)}...</span></div>`;
+        html += `<div class="post-detail"><span class="label">createdAt:</span> <span class="value">${post.createdAt}</span></div>`;
+        html += `<div class="post-detail"><span class="label">createdAt类型:</span> <span class="value">${typeof post.createdAt}</span></div>`;
+        html += `<div class="post-detail"><span class="label">timestamp:</span> <span class="value">${post.timestamp}</span></div>`;
+        html += `<div class="post-detail"><span class="label">timestamp类型:</span> <span class="value">${typeof post.timestamp}</span></div>`;
+
+        if (hasProblem) {
+          html += `<div class="post-detail" style="color:#dc2626;"><strong>⚠️ 问题: ${!post.createdAt ? 'createdAt为空' : post.createdAt === '刚刚' ? 'createdAt是字符串"刚刚"' : '时间格式无效'}</strong></div>`;
+        }
+
+        html += `</div>`;
+      });
+
+      document.getElementById('result').innerHTML = html;
+    }
+
+    function fixAll() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const now = Date.now();
+      let fixedCount = 0;
+      const details = [];
+
+      posts.forEach((post, index) => {
+        const oldCreatedAt = post.createdAt;
+
+        // 检查并修复
+        if (!post.createdAt || post.createdAt === '刚刚' || typeof post.createdAt === 'string' || isNaN(new Date(post.createdAt).getTime())) {
+          let newTime = null;
+
+          // 方法1: 使用 timestamp
+          if (post.timestamp && typeof post.timestamp === 'number') {
+            newTime = post.timestamp;
+            details.push(`帖子${index + 1}: 使用 timestamp`);
+          }
+          // 方法2: 从 ID 提取
+          else if (post._id && !isNaN(parseInt(post._id))) {
+            const idNum = parseInt(post._id);
+            if (idNum > 1000000000000 && idNum < now) {
+              newTime = idNum;
+              details.push(`帖子${index + 1}: 从 ID 提取 (${new Date(newTime).toLocaleString()})`);
+            }
+          }
+          // 方法3: 推算时间
+          else {
+            newTime = now - (index * 60000);
+            details.push(`帖子${index + 1}: 推算时间`);
+          }
+
+          // 转换为数字
+          post.createdAt = newTime;
+          post.timestamp = newTime;
+          fixedCount++;
+        } else {
+          // 确保是数字类型
+          if (typeof post.createdAt === 'string') {
+            post.createdAt = parseInt(post.createdAt);
+            details.push(`帖子${index + 1}: 转换为数字`);
+            fixedCount++;
+          }
+          if (!post.timestamp || typeof post.timestamp === 'string') {
+            post.timestamp = post.createdAt;
+          }
+        }
+      });
+
+      // 排序
+      posts.sort((a, b) => {
+        const timeA = a.createdAt || a.timestamp || 0;
+        const timeB = b.createdAt || b.timestamp || 0;
+        return timeB - timeA;
+      });
+
+      localStorage.setItem('posts', JSON.stringify(posts));
+
+      let html = `<div style="background: #d1fae5; padding: 16px; border-radius: 8px; color: #065f46;">`;
+      html += `<strong>✅ 修复完成！</strong><br><br>`;
+      html += `修复了 ${fixedCount} 个帖子<br><br>`;
+      if (details.length > 0) {
+        html += `<strong>修复详情：</strong><br>`;
+        details.forEach(d => html += `• ${d}<br>`);
+      }
+      html += `<br>请刷新社群页面查看效果`;
+      html += `</div>`;
+
+      document.getElementById('result').innerHTML = html;
+    }
+  </script>
+</body>
+</html>

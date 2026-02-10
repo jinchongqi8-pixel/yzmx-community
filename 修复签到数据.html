@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>修复签到数据</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; }
+    .info {
+      background: #e0f2fe;
+      color: #075985;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #0ea5e9;
+    }
+    .warning {
+      background: #fff3cd;
+      color: #856404;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #ffc107;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #10b981;
+    }
+    .btn {
+      padding: 12px 24px;
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 12px;
+    }
+    .btn:hover { background: #0284c7; }
+    .user-card {
+      background: #f8f9fa;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 12px 0;
+    }
+    .user-title {
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+    .user-detail {
+      font-size: 14px;
+      color: #666;
+      margin: 4px 0;
+    }
+    .diff {
+      color: #dc2626;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 签到数据修复工具</h1>
+
+    <div class="info">
+      <strong>💡 功能说明：</strong><br>
+      这个工具会检查并修复用户数据不一致的问题。<br>
+      以金币数量较多的数据为准进行同步。
+    </div>
+
+    <button class="btn" onclick="checkData()">📊 检查数据</button>
+    <button class="btn" onclick="syncData()">🔄 同步数据</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    function checkData() {
+      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      const checkins = JSON.parse(localStorage.getItem('checkins') || '{}');
+
+      let html = '<div class="info"><strong>📊 数据检查报告：</strong><br><br>';
+
+      // 当前用户信息
+      html += `<div class="user-card">`;
+      html += `<div class="user-title">👤 当前登录用户 (userInfo)</div>`;
+      html += `<div class="user-detail">ID: ${userInfo._id || '无'}</div>`;
+      html += `<div class="user-detail">昵称: ${userInfo.nickname || '无'}</div>`;
+      html += `<div class="user-detail">金币: <strong>${userInfo.coins || 0}</strong></div>`;
+      html += `<div class="user-detail">签到天数: ${userInfo.checkInDays || 0}</div>`;
+      html += `</div>`;
+
+      // users 数组中的用户
+      const userInArray = users.find(u => u._id === userInfo._id);
+      if (userInArray) {
+        html += `<div class="user-card">`;
+        html += `<div class="user-title">👥 users 数组中的用户</div>`;
+        html += `<div class="user-detail">ID: ${userInArray._id}</div>`;
+        html += `<div class="user-detail">昵称: ${userInArray.nickname || '无'}</div>`;
+        html += `<div class="user-detail">金币: <strong>${userInArray.coins || 0}</strong></div>`;
+        html += `<div class="user-detail">签到天数: ${userInArray.checkInDays || 0}</div>`;
+
+        // 比较差异
+        const coinDiff = (userInfo.coins || 0) - (userInArray.coins || 0);
+        if (coinDiff !== 0) {
+          html += `<div class="user-detail diff">金币差异: ${coinDiff > 0 ? '+' : ''}${coinDiff}</div>`;
+        }
+        html += `</div>`;
+      } else {
+        html += `<div class="warning">⚠️ users 数组中找不到此用户！</div>`;
+      }
+
+      // 签到记录
+      const userCheckins = checkins[userInfo._id] || [];
+      html += `<div class="user-card">`;
+      html += `<div class="user-title">📅 签到记录</div>`;
+      html += `<div class="user-detail">总签到次数: ${userCheckins.length}</div>`;
+      if (userCheckins.length > 0) {
+        html += `<div class="user-detail">最近签到: ${userCheckins[0].date}</div>`;
+      }
+      html += `</div>`;
+
+      html += '</div>';
+      document.getElementById('result').innerHTML = html;
+    }
+
+    function syncData() {
+      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+      if (!userInfo._id) {
+        alert('❌ 请先登录！');
+        return;
+      }
+
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      const userIndex = users.findIndex(u => u._id === userInfo._id);
+
+      let fixedCount = 0;
+      let html = '<div class="success"><strong>✅ 同步完成！</strong><br><br>';
+
+      if (userIndex !== -1) {
+        // 找到了，比较并同步（以金币多的为准）
+        const userInArray = users[userIndex];
+        const userInfoCoins = userInfo.coins || 0;
+        const userArrayCoins = userInArray.coins || 0;
+
+        if (userInfoCoins !== userArrayCoins) {
+          const maxCoins = Math.max(userInfoCoins, userArrayCoins);
+          userInfo.coins = maxCoins;
+          users[userIndex].coins = maxCoins;
+          html += `金币已同步为: ${maxCoins}<br>`;
+          fixedCount++;
+        }
+
+        // 同步签到天数（以大的为准）
+        const userInfoDays = userInfo.checkInDays || 0;
+        const userArrayDays = userInArray.checkInDays || 0;
+        if (userInfoDays !== userArrayDays) {
+          const maxDays = Math.max(userInfoDays, userArrayDays);
+          userInfo.checkInDays = maxDays;
+          users[userIndex].checkInDays = maxDays;
+          html += `签到天数已同步为: ${maxDays}<br>`;
+          fixedCount++;
+        }
+
+        // 同步其他字段
+        if (userInfo.nickname && !userInArray.nickname) {
+          users[userIndex].nickname = userInfo.nickname;
+          html += `昵称已同步<br>`;
+          fixedCount++;
+        }
+        if (userInfo.avatar && !userInArray.avatar) {
+          users[userIndex].avatar = userInfo.avatar;
+          html += `头像已同步<br>`;
+          fixedCount++;
+        }
+      } else {
+        // 没找到，添加到 users 数组
+        users.push(userInfo);
+        html += `✅ 用户已添加到 users 数组<br>`;
+        fixedCount++;
+      }
+
+      // 保存
+      localStorage.setItem('userInfo', JSON.stringify(userInfo));
+      localStorage.setItem('users', JSON.stringify(users));
+
+      if (fixedCount === 0) {
+        html += '✅ 数据已经是同步的，无需修复';
+      }
+
+      html += '</div>';
+      document.getElementById('result').innerHTML = html;
+    }
+  </script>
+</body>
+</html>

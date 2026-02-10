@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>修复帖子时间</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; }
+    .info {
+      background: #e0f2fe;
+      color: #075985;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #0ea5e9;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #10b981;
+    }
+    .warning {
+      background: #fff3cd;
+      color: #856404;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #ffc107;
+    }
+    .btn {
+      padding: 12px 24px;
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 12px;
+    }
+    .btn:hover { background: #0284c7; }
+    .post-item {
+      background: #f8f9fa;
+      padding: 12px;
+      border-radius: 8px;
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .post-time {
+      color: #666;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+    .missing {
+      color: #dc2626;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 帖子时间修复工具</h1>
+
+    <div class="info">
+      <strong>💡 功能说明：</strong><br>
+      这个工具会检查所有帖子的时间字段，<br>
+      并自动修复缺失或错误的时间戳。
+    </div>
+
+    <button class="btn" onclick="checkTimes()">📊 检查帖子时间</button>
+    <button class="btn" onclick="fixTimes()">🔧 修复时间</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    function checkTimes() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+
+      let html = '<div class="info"><strong>📊 帖子时间检查报告：</strong><br><br>';
+      html += `总帖子数：${posts.length}<br><br>`;
+
+      let missingCount = 0;
+      let invalidCount = 0;
+      const problemPosts = [];
+
+      posts.forEach((post, index) => {
+        const hasCreatedAt = !!post.createdAt;
+        const hasTimestamp = !!post.timestamp;
+        const createdAtValue = post.createdAt;
+        const timestampValue = post.timestamp;
+
+        if (!hasCreatedAt && !hasTimestamp) {
+          missingCount++;
+          problemPosts.push({
+            index: index + 1,
+            content: post.content?.substring(0, 50) + '...',
+            issue: '完全缺少时间字段'
+          });
+        } else if (!hasCreatedAt) {
+          invalidCount++;
+          problemPosts.push({
+            index: index + 1,
+            content: post.content?.substring(0, 50) + '...',
+            issue: '缺少 createdAt'
+          });
+        }
+      });
+
+      html += `缺少时间字段：${missingCount}<br>`;
+      html += `缺少 createdAt：${invalidCount}<br>`;
+
+      if (problemPosts.length > 0) {
+        html += `<br><strong>问题帖子（前10条）：</strong><br>`;
+        problemPosts.slice(0, 10).forEach(p => {
+          html += `<div class="post-item">`;
+          html += `<div>#${p.index}: ${p.content}</div>`;
+          html += `<div class="post-time missing">⚠️ ${p.issue}</div>`;
+          html += `</div>`;
+        });
+      }
+
+      if (missingCount === 0 && invalidCount === 0) {
+        html += `<br>✅ 所有帖子时间正常！`;
+      }
+
+      html += '</div>';
+      document.getElementById('result').innerHTML = html;
+    }
+
+    function fixTimes() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+
+      let fixedCount = 0;
+      const now = Date.now();
+      const details = [];
+
+      posts.forEach((post, index) => {
+        const originalCreatedAt = post.createdAt;
+        const originalTimestamp = post.timestamp;
+
+        // 如果 createdAt 为空、无效或不是数字
+        if (!post.createdAt || post.createdAt === '刚刚' || isNaN(new Date(post.createdAt).getTime())) {
+          let newTime = null;
+
+          // 方法1: 尝试使用 timestamp
+          if (post.timestamp && !isNaN(new Date(post.timestamp).getTime())) {
+            newTime = post.timestamp;
+            details.push(`帖子${index + 1}: 使用 timestamp (${post.timestamp})`);
+          }
+          // 方法2: 尝试从 ID 提取时间戳
+          else {
+            const idTime = parseInt(post._id);
+            if (!isNaN(idTime) && idTime > 1000000000000 && idTime < now) {
+              newTime = idTime;
+              details.push(`帖子${index + 1}: 从 ID 提取时间 (${idTime})`);
+            }
+            // 方法3: 根据帖子顺序推算时间（每个帖子间隔1分钟）
+            else {
+              newTime = now - (index * 60000);
+              details.push(`帖子${index + 1}: 推算时间 (现在 - ${index}分钟)`);
+            }
+          }
+
+          post.createdAt = newTime;
+          post.timestamp = newTime;
+          fixedCount++;
+        } else if (!post.timestamp) {
+          // 如果 createdAt 正常但没有 timestamp，补充 timestamp
+          post.timestamp = post.createdAt;
+        }
+      });
+
+      // 按时间倒序排序
+      posts.sort((a, b) => {
+        const timeA = new Date(a.createdAt || a.timestamp || 0);
+        const timeB = new Date(b.createdAt || b.timestamp || 0);
+        return timeB - timeA;
+      });
+
+      localStorage.setItem('posts', JSON.stringify(posts));
+
+      let html = '<div class="success"><strong>✅ 修复完成！</strong><br><br>';
+      html += `总共检查了 ${posts.length} 个帖子<br>`;
+      html += `修复了 ${fixedCount} 个帖子的时间<br><br>`;
+
+      if (details.length > 0) {
+        html += '<strong>修复详情：</strong><br>';
+        details.slice(0, 10).forEach(d => {
+          html += `• ${d}<br>`;
+        });
+      }
+
+      html += `<br>请刷新页面查看效果`;
+      html += '</div>';
+
+      document.getElementById('result').innerHTML = html;
+    }
+  </script>
+</body>
+</html>

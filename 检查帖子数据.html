@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>检查帖子数据</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1200px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .section {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; }
+    h2 { color: #0ea5e9; margin-top: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    th {
+      background: #f8f9fa;
+      font-weight: 600;
+    }
+    .btn {
+      padding: 8px 16px;
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    .btn:hover { background: #0284c7; }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+    .post-item {
+      padding: 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .post-content {
+      margin: 8px 0;
+      color: #333;
+    }
+    .post-meta {
+      font-size: 12px;
+      color: #999;
+    }
+    .warning {
+      background: #fff3cd;
+      color: #856404;
+      padding: 12px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+      padding: 12px;
+      border-radius: 4px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 帖子数据检查工具</h1>
+
+  <div class="section">
+    <h2>📊 localStorage 数据概览</h2>
+    <div id="storageOverview"></div>
+  </div>
+
+  <div class="section">
+    <h2>📝 所有帖子数据</h2>
+    <div id="postsData"></div>
+    <button class="btn btn-danger" onclick="clearAllPosts()">清空所有帖子</button>
+    <button class="btn" onclick="location.reload()">刷新页面</button>
+  </div>
+
+  <div class="section">
+    <h2>🔧 数据修复工具</h2>
+    <div class="warning">
+      <strong>⚠️ 注意：</strong>点击下方按钮会尝试合并所有帖子数据，确保没有丢失
+    </div>
+    <button class="btn" onclick="mergePosts()">🔄 合并所有帖子数据</button>
+    <button class="btn" onclick="exportData()">📤 导出数据</button>
+  </div>
+
+  <script>
+    // 显示所有 localStorage 键
+    function showStorageOverview() {
+      const overview = document.getElementById('storageOverview');
+      let html = '<table><thead><tr><th>键名</th><th>数据类型</th><th>数据大小</th><th>记录数</th></tr></thead><tbody>';
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        const value = localStorage.getItem(key);
+        let dataType = '未知';
+        let recordCount = '-';
+
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            dataType = '数组';
+            recordCount = parsed.length;
+          } else if (typeof parsed === 'object') {
+            dataType = '对象';
+            recordCount = Object.keys(parsed).length;
+          } else {
+            dataType = typeof parsed;
+          }
+        } catch (e) {
+          dataType = '字符串';
+        }
+
+        const sizeInBytes = new Blob([value]).size;
+        const sizeInKB = (sizeInBytes / 1024).toFixed(2);
+
+        html += `<tr>
+          <td><strong>${key}</strong></td>
+          <td>${dataType}</td>
+          <td>${sizeInKB} KB</td>
+          <td>${recordCount}</td>
+        </tr>`;
+      }
+
+      html += '</tbody></table>';
+      overview.innerHTML = html;
+    }
+
+    // 显示所有帖子
+    function showAllPosts() {
+      const container = document.getElementById('postsData');
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+
+      if (posts.length === 0) {
+        container.innerHTML = '<p style="color: #999; text-align: center; padding: 40px;">暂无帖子数据</p>';
+        return;
+      }
+
+      let html = `<p class="success">✅ 共找到 ${posts.length} 条帖子</p>`;
+
+      posts.forEach((post, index) => {
+        const date = new Date(post.createdAt || post.timestamp);
+        const formattedDate = date.toLocaleString('zh-CN');
+
+        html += `<div class="post-item">
+          <div><strong>#${index + 1} - ${post.userName || '匿名'}</strong></div>
+          <div class="post-content">${post.content || '（无内容）'}</div>
+          <div class="post-meta">
+            🆔 ${post._id} |
+            📅 ${formattedDate} |
+            👁 ${post.viewCount || 0} |
+            ❤️ ${post.likeCount || post.likes || 0} |
+            💬 ${post.commentCount || 0}
+            ${post.images && post.images.length ? ` | 🖼️ ${post.images.length}张图片` : ''}
+          </div>
+        </div>`;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // 清空所有帖子
+    function clearAllPosts() {
+      if (confirm('确定要清空所有帖子吗？此操作不可恢复！')) {
+        localStorage.removeItem('posts');
+        alert('✅ 已清空所有帖子');
+        location.reload();
+      }
+    }
+
+    // 合并帖子数据（防止数据丢失）
+    function mergePosts() {
+      const currentPosts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const uniquePosts = [];
+      const seenIds = new Set();
+
+      // 去重
+      currentPosts.forEach(post => {
+        if (!seenIds.has(post._id)) {
+          seenIds.add(post._id);
+          uniquePosts.push(post);
+        }
+      });
+
+      // 按时间排序
+      uniquePosts.sort((a, b) => {
+        const timeA = new Date(a.createdAt || a.timestamp);
+        const timeB = new Date(b.createdAt || b.timestamp);
+        return timeB - timeA;
+      });
+
+      localStorage.setItem('posts', JSON.stringify(uniquePosts));
+
+      alert(`✅ 已完成数据合并！\n\n原始帖子数：${currentPosts.length}\n去重后：${uniquePosts.length}`);
+      location.reload();
+    }
+
+    // 导出数据
+    function exportData() {
+      const data = {
+        posts: JSON.parse(localStorage.getItem('posts') || '[]'),
+        users: JSON.parse(localStorage.getItem('users') || '[]'),
+        userInfo: JSON.parse(localStorage.getItem('userInfo') || '{}'),
+        timestamp: new Date().toISOString()
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `community-backup-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // 页面加载时执行
+    window.onload = function() {
+      showStorageOverview();
+      showAllPosts();
+    };
+  </script>
+</body>
+</html>

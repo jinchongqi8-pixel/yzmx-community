@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>帖子数据恢复工具</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .section {
+      background: white;
+      padding: 24px;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; margin-bottom: 20px; }
+    h2 { color: #0ea5e9; margin-top: 0; }
+    .warning {
+      background: #fff3cd;
+      color: #856404;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #ffc107;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #10b981;
+    }
+    .info {
+      background: #e0f2fe;
+      color: #075985;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #0ea5e9;
+    }
+    .btn {
+      padding: 12px 24px;
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 12px;
+      margin-bottom: 12px;
+    }
+    .btn:hover { background: #0284c7; }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-success { background: #10b981; }
+    .btn-success:hover { background: #059669; }
+    textarea {
+      width: 100%;
+      min-height: 200px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .stat-card {
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      color: #0ea5e9;
+      margin-bottom: 8px;
+    }
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔧 帖子数据恢复工具</h1>
+
+  <div class="section">
+    <h2>📊 当前数据状态</h2>
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-number" id="postCount">0</div>
+        <div class="stat-label">帖子总数</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="duplicateCount">0</div>
+        <div class="stat-label">重复帖子</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-number" id="storageSize">0 KB</div>
+        <div class="stat-label">数据大小</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>🗄️ 数据导出与导入</h2>
+    <div class="info">
+      <strong>💡 提示：</strong>定期备份数据可以防止数据丢失。如果数据丢失，可以从备份中恢复。
+    </div>
+    <br>
+    <button class="btn" onclick="exportData()">📤 导出数据备份</button>
+    <label class="btn">
+      📥 导入备份恢复
+      <input type="file" accept=".json" style="display: none;" onchange="importData(event)">
+    </label>
+  </div>
+
+  <div class="section">
+    <h2>🔍 数据查看</h2>
+    <textarea id="dataViewer" readonly placeholder="点击下方按钮查看数据..."></textarea>
+    <br><br>
+    <button class="btn" onclick="viewCurrentData()">👁️ 查看当前帖子数据</button>
+  </div>
+
+  <div class="section">
+    <h2>⚠️ 数据修复</h2>
+    <div class="warning">
+      <strong>⚠️ 警告：</strong>以下操作会修改数据，请先导出备份！
+    </div>
+    <br>
+    <button class="btn btn-success" onclick="deduplicatePosts()">🔄 去重并修复数据</button>
+    <button class="btn btn-danger" onclick="clearAllPosts()">🗑️ 清空所有帖子</button>
+  </div>
+
+  <div id="resultMessage"></div>
+
+  <script>
+    // 显示统计信息
+    function showStats() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const uniqueIds = new Set();
+      let duplicateCount = 0;
+
+      posts.forEach(post => {
+        if (uniqueIds.has(post._id)) {
+          duplicateCount++;
+        } else {
+          uniqueIds.add(post._id);
+        }
+      });
+
+      document.getElementById('postCount').textContent = posts.length;
+      document.getElementById('duplicateCount').textContent = duplicateCount;
+
+      const dataSize = new Blob([localStorage.getItem('posts') || '']).size;
+      document.getElementById('storageSize').textContent = (dataSize / 1024).toFixed(2) + ' KB';
+    }
+
+    // 导出数据
+    function exportData() {
+      const data = {
+        posts: JSON.parse(localStorage.getItem('posts') || '[]'),
+        users: JSON.parse(localStorage.getItem('users') || '[]'),
+        userInfo: JSON.parse(localStorage.getItem('userInfo') || '{}'),
+        courses: JSON.parse(localStorage.getItem('courses') || '[]'),
+        checkins: JSON.parse(localStorage.getItem('checkins') || '{}'),
+        gold_logs: JSON.parse(localStorage.getItem('gold_logs') || '[]'),
+        user_courses: JSON.parse(localStorage.getItem('user_courses') || '{}'),
+        exportTime: new Date().toISOString(),
+        version: '1.0'
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `community-backup-${new Date().getTime()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showMessage('✅ 数据已导出！请妥善保存备份文件。', 'success');
+    }
+
+    // 导入数据
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = JSON.parse(e.target.result);
+
+          if (data.posts && Array.isArray(data.posts)) {
+            localStorage.setItem('posts', JSON.stringify(data.posts));
+          }
+          if (data.users && Array.isArray(data.users)) {
+            localStorage.setItem('users', JSON.stringify(data.users));
+          }
+          if (data.userInfo && typeof data.userInfo === 'object') {
+            localStorage.setItem('userInfo', JSON.stringify(data.userInfo));
+          }
+          if (data.courses && Array.isArray(data.courses)) {
+            localStorage.setItem('courses', JSON.stringify(data.courses));
+          }
+          if (data.checkins && typeof data.checkins === 'object') {
+            localStorage.setItem('checkins', JSON.stringify(data.checkins));
+          }
+          if (data.gold_logs && Array.isArray(data.gold_logs)) {
+            localStorage.setItem('gold_logs', JSON.stringify(data.gold_logs));
+          }
+          if (data.user_courses && typeof data.user_courses === 'object') {
+            localStorage.setItem('user_courses', JSON.stringify(data.user_courses));
+          }
+
+          showMessage('✅ 数据已恢复！', 'success');
+          showStats();
+          setTimeout(() => location.reload(), 1500);
+        } catch (error) {
+          showMessage('❌ 导入失败：' + error.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // 查看当前数据
+    function viewCurrentData() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const viewer = document.getElementById('dataViewer');
+      viewer.value = JSON.stringify(posts, null, 2);
+    }
+
+    // 去重并修复数据
+    function deduplicatePosts() {
+      if (!confirm('确定要执行数据去重吗？这会删除重复的帖子。')) {
+        return;
+      }
+
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const uniquePosts = [];
+      const seenIds = new Set();
+
+      // 去重，保留最早的帖子
+      posts.forEach(post => {
+        if (!seenIds.has(post._id)) {
+          seenIds.add(post._id);
+          uniquePosts.push(post);
+        }
+      });
+
+      // 按时间倒序排序
+      uniquePosts.sort((a, b) => {
+        const timeA = new Date(a.createdAt || a.timestamp || 0);
+        const timeB = new Date(b.createdAt || b.timestamp || 0);
+        return timeB - timeA;
+      });
+
+      localStorage.setItem('posts', JSON.stringify(uniquePosts));
+
+      showMessage(`✅ 数据修复完成！\n\n原始帖子：${posts.length} 条\n去重后：${uniquePosts.length} 条\n删除了：${posts.length - uniquePosts.length} 条重复数据`, 'success');
+      showStats();
+      viewCurrentData();
+    }
+
+    // 清空所有帖子
+    function clearAllPosts() {
+      if (!confirm('⚠️ 确定要清空所有帖子吗？此操作不可恢复！')) {
+        return;
+      }
+      if (!confirm('⚠️ 再次确认：真的要删除所有帖子吗？')) {
+        return;
+      }
+
+      localStorage.removeItem('posts');
+      showMessage('✅ 所有帖子已清空', 'success');
+      showStats();
+      viewCurrentData();
+    }
+
+    // 显示消息
+    function showMessage(message, type) {
+      const container = document.getElementById('resultMessage');
+      const className = type === 'success' ? 'success' : type === 'error' ? 'warning' : 'info';
+      container.innerHTML = `<div class="${className}" style="white-space: pre-wrap;">${message}</div>`;
+
+      setTimeout(() => {
+        container.innerHTML = '';
+      }, 5000);
+    }
+
+    // 页面加载时执行
+    window.onload = function() {
+      showStats();
+      viewCurrentData();
+    };
+  </script>
+</body>
+</html>

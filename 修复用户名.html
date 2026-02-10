@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>修复帖子用户名</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 { color: #333; }
+    .info {
+      background: #e0f2fe;
+      color: #075985;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #0ea5e9;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #10b981;
+    }
+    .warning {
+      background: #fff3cd;
+      color: #856404;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      border-left: 4px solid #ffc107;
+    }
+    .btn {
+      padding: 12px 24px;
+      background: #0ea5e9;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-right: 12px;
+    }
+    .btn:hover { background: #0284c7; }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+    textarea {
+      width: 100%;
+      min-height: 150px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+      box-sizing: border-box;
+      margin: 16px 0;
+    }
+    .stat {
+      display: flex;
+      justify-content: space-around;
+      margin: 20px 0;
+    }
+    .stat-item {
+      text-align: center;
+      padding: 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      flex: 1;
+      margin: 0 8px;
+    }
+    .stat-number {
+      font-size: 32px;
+      font-weight: 700;
+      color: #0ea5e9;
+    }
+    .stat-label {
+      font-size: 14px;
+      color: #666;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 帖子用户名修复工具</h1>
+
+    <div class="info">
+      <strong>ℹ️ 功能说明：</strong><br>
+      这个工具会自动修复帖子中的用户名显示问题。<br>
+      它会从 users 数组中获取最新昵称，并更新所有帖子的 userName 字段。
+    </div>
+
+    <div class="stat">
+      <div class="stat-item">
+        <div class="stat-number" id="totalPosts">0</div>
+        <div class="stat-label">帖子总数</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number" id="fixedPosts">0</div>
+        <div class="stat-label">需要修复</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-number" id="userCount">0</div>
+        <div class="stat-label">用户总数</div>
+      </div>
+    </div>
+
+    <button class="btn" onclick="analyzeData()">📊 分析数据</button>
+    <button class="btn" onclick="fixUserNames()">🔧 修复用户名</button>
+    <button class="btn btn-danger" onclick="if(confirm('确定要清空数据重新开始吗？')){localStorage.clear();location.reload();}">🗑️ 清空所有数据</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    function showStats() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+
+      document.getElementById('totalPosts').textContent = posts.length;
+      document.getElementById('userCount').textContent = users.length;
+
+      // 分析需要修复的帖子
+      let fixedCount = 0;
+      posts.forEach(post => {
+        const user = users.find(u => u._id === post.userId || u.phone === post.userId?.replace('user_', ''));
+        if (user && user.nickname !== post.userName) {
+          fixedCount++;
+        }
+      });
+
+      document.getElementById('fixedPosts').textContent = fixedCount;
+    }
+
+    function analyzeData() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+
+      let html = '<div class="info"><strong>📊 数据分析报告：</strong><br><br>';
+      html += `帖子总数：${posts.length}<br>`;
+      html += `用户总数：${users.length}<br><br>`;
+
+      let problems = [];
+      posts.forEach(post => {
+        const user = users.find(u => u._id === post.userId);
+        if (!user) {
+          problems.push(`❌ 帖子 "${post.content.substring(0, 30)}..." 的作者 ${post.userId} 不在用户列表中`);
+        } else if (user.nickname !== post.userName) {
+          problems.push(`⚠️ 帖子 "${post.content.substring(0, 30)}..." 的用户名：${post.userName} → 应该是：${user.nickname}`);
+        }
+      });
+
+      if (problems.length === 0) {
+        html += '✅ 所有数据正常！</div>';
+      } else {
+        html += `<strong>发现 ${problems.length} 个问题：</strong><br><br>`;
+        problems.slice(0, 10).forEach(p => {
+          html += p + '<br>';
+        });
+        if (problems.length > 10) {
+          html += `<br>...还有 ${problems.length - 10} 个问题`;
+        }
+        html += '</div>';
+      }
+
+      document.getElementById('result').innerHTML = html;
+      showStats();
+    }
+
+    function fixUserNames() {
+      const posts = JSON.parse(localStorage.getItem('posts') || '[]');
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+
+      let fixedCount = 0;
+      const problems = [];
+
+      posts.forEach(post => {
+        // 方法1: 通过 userId 匹配
+        let user = users.find(u => u._id === post.userId);
+
+        // 方法2: 如果找不到，尝试通过手机号匹配
+        if (!user && post.userId && post.userId.startsWith('user_')) {
+          const phone = post.userId.replace('user_', '');
+          user = users.find(u => u.phone === phone);
+        }
+
+        if (user) {
+          if (user.nickname !== post.userName) {
+            const oldName = post.userName;
+            post.userName = user.nickname;
+            fixedCount++;
+            problems.push(`✅ "${oldName}" → "${user.nickname}"`);
+          }
+        } else {
+          problems.push(`❌ 找不到用户 ${post.userId}`);
+        }
+      });
+
+      localStorage.setItem('posts', JSON.stringify(posts));
+
+      let html = '<div class="success"><strong>✅ 修复完成！</strong><br><br>';
+      html += `修复了 ${fixedCount} 个用户名<br><br>`;
+      if (problems.length > 0 && problems.length < 20) {
+        html += '<strong>详细记录：</strong><br>';
+        problems.forEach(p => {
+          html += p + '<br>';
+        });
+      }
+      html += '</div>';
+
+      document.getElementById('result').innerHTML = html;
+      showStats();
+    }
+
+    window.onload = function() {
+      showStats();
+    };
+  </script>
+</body>
+</html>
