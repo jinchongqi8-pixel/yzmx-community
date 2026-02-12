@@ -1,5 +1,11 @@
 <template>
   <div class="community-container">
+    <!-- 欢迎横幅 -->
+    <WelcomeBanner />
+
+    <!-- 公告横幅 -->
+    <AnnouncementBanner />
+
     <!-- 导航栏 -->
     <nav class="navbar">
       <div class="nav-content">
@@ -230,6 +236,8 @@ import { ElMessage } from 'element-plus'
 import { Plus, Search, ChatDotRound, Loading } from '@element-plus/icons-vue'
 import { getPostList, toggleLike, checkLike, toggleFollow } from '../api/cloud'
 import { formatTime } from '../utils/formatTime'
+import WelcomeBanner from '../components/WelcomeBanner.vue'
+import AnnouncementBanner from '../components/AnnouncementBanner.vue'
 
 const router = useRouter()
 const posts = ref([])
