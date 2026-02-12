@@ -112,20 +112,15 @@ const login = async () => {
   loading.value = true
 
   try {
-    // 使用 OTP 验证登录
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone: '+86' + phone.value,
-      token: code.value,
-      type: 'sms'
-    })
-
-    if (error) throw error
+    // ========== 开发模式：跳过短信验证 ==========
+    // 生成固定用户ID
+    const devUserId = 'dev_' + phone.value
 
     // 检查用户 profile 是否存在
     const { data: profile } = await supabase
       .from(TABLES.PROFILES)
       .select('*')
-      .eq('id', data.user.id)
+      .eq('id', devUserId)
       .single()
 
     if (!profile) {
@@ -133,15 +128,27 @@ const login = async () => {
       await supabase
         .from(TABLES.PROFILES)
         .insert({
-          id: data.user.id,
+          id: devUserId,
           nickname: '用户' + phone.value.substr(-4),
           phone: phone.value,
           gold_count: 100
         })
     }
 
-    alert('登录成功！')
+    // 存储用户ID到本地（开发模式）
+    localStorage.setItem('devUserId', devUserId)
+
+    alert('登录成功！（开发模式）')
     routerInstance.push('/community')
+
+    // ========== 生产模式：取消下面的注释 ==========
+    // const { data, error } = await supabase.auth.verifyOtp({
+    //   phone: '+86' + phone.value,
+    //   token: code.value,
+    //   type: 'sms'
+    // })
+    // if (error) throw error
+    // ... 后续逻辑
   } catch (error) {
     console.error('登录失败:', error)
     alert('登录失败：' + error.message)

@@ -1,5 +1,26 @@
 import { supabase, TABLES } from '../supabase/client'
 
+// ==================== 辅助函数 ====================
+
+/**
+ * 获取当前用户ID（开发模式兼容）
+ */
+async function getCurrentUserId() {
+  // 开发模式：从 localStorage 获取
+  const devUserId = localStorage.getItem('devUserId')
+  if (devUserId) {
+    return devUserId
+  }
+
+  // 生产模式：从 Supabase Auth 获取
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    return user?.id || null
+  } catch {
+    return null
+  }
+}
+
 // ==================== 用户认证 ====================
 
 /**
@@ -27,47 +48,48 @@ export async function phoneLogin(phone, code) {
       throw new Error('请输入6位验证码')
     }
 
-    // 使用 Supabase Auth 发送 OTP
-    const { data, error } = await supabase.auth.signInWithOtp({
-      phone: phone,
-      options: {
-        channel: 'sms'  // 仅短信通道
-      }
-    })
+    // ========== 开发模式：生成固定用户ID ==========
+    const userId = 'dev_' + phone
 
-    // 检查用户是否已存在于 profiles 表
-    const { data: { user } } = await supabase.auth.getUser()
+    // 检查 profile 是否存在
+    const { data: profile } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .eq('id', userId)
+      .single()
 
-    if (user) {
-      // 检查 profile 是否存在
-      const { data: profile } = await supabase
+    // 如果不存在，创建一个
+    if (!profile) {
+      await supabase
         .from(TABLES.PROFILES)
-        .select('*')
-        .eq('id', user.id)
-        .single()
-
-      // 如果 profile 不存在，创建一个
-      if (!profile) {
-        await supabase
-          .from(TABLES.PROFILES)
-          .insert({
-            id: user.id,
-            nickname: '用户' + phone.substr(-4),
-            phone: phone
-          })
-      }
+        .insert({
+          id: userId,
+          nickname: '用户' + phone.substr(-4),
+          phone: phone,
+          gold_count: 100
+        })
     }
 
     return {
       code: 0,
-      message: '登录成功',
-      openid: user?.id,
+      message: '登录成功（开发模式）',
+      openid: userId,
       userInfo: profile || {
-        _id: user?.id,
+        _id: userId,
         phone: phone,
         nickname: '用户' + phone.substr(-4)
       }
     }
+
+    // ========== 生产模式：取消下面的注释并配置短信服务 ==========
+    // const { data, error } = await supabase.auth.verifyOtp({
+    //   phone: '+86' + phone,
+    //   token: code,
+    //   type: 'sms'
+    // })
+    // if (error) throw error
+    // const userId = data.user.id
+    // ... 后续逻辑同上
   } catch (error) {
     console.error('登录失败:', error)
     throw error
@@ -79,6 +101,18 @@ export async function phoneLogin(phone, code) {
  */
 export async function getCurrentUser() {
   try {
+    // 开发模式：从 localStorage 获取
+    const devUserId = localStorage.getItem('devUserId')
+    if (devUserId) {
+      const { data: profile } = await supabase
+        .from(TABLES.PROFILES)
+        .select('*')
+        .eq('id', devUserId)
+        .single()
+      return profile
+    }
+
+    // 生产模式：从 Supabase Auth 获取
     const { data: { user }, error } = await supabase.auth.getUser()
 
     if (error) throw error
@@ -89,7 +123,7 @@ export async function getCurrentUser() {
     const { data: profile } = await supabase
       .from(TABLES.PROFILES)
       .select('*')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single()
 
     return profile
@@ -104,6 +138,7 @@ export async function getCurrentUser() {
  */
 export async function logout() {
   await supabase.auth.signOut()
+  localStorage.removeItem('devUserId')
   localStorage.clear()
 }
 
@@ -168,18 +203,18 @@ export async function getPostDetail(postId) {
  * @param {object} data - 帖子数据 { content, images, tags, type }
  */
 export async function createPost(data) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   // 获取用户 profile
   const { data: profile } = await supabase
     .from(TABLES.PROFILES)
     .select('*')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
   const postData = {
-    author_id: user.id,
+    author_id: userId,
     author_name: profile?.nickname || '',
     author_avatar: profile?.avatar || '',
     content: data.content,
@@ -208,8 +243,8 @@ export async function createPost(data) {
  * @param {object} data - 更新数据
  */
 export async function updatePost(postId, data) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   const { data: updatedPost, error } = await supabase
     .from(TABLES.POSTS)
@@ -220,7 +255,7 @@ export async function updatePost(postId, data) {
       updated_at: new Date().toISOString()
     })
     .eq('id', postId)
-    .eq('author_id', user.id)  // 只能更新自己的帖子
+    .eq('author_id', userId)  // 只能更新自己的帖子
     .select()
     .single()
 
@@ -237,14 +272,14 @@ export async function updatePost(postId, data) {
  * @param {string} postId - 帖子ID
  */
 export async function deletePost(postId) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   const { error } = await supabase
     .from(TABLES.POSTS)
     .delete()
     .eq('id', postId)
-    .eq('author_id', user.id)
+    .eq('author_id', userId)
 
   if (error) throw error
 
@@ -280,12 +315,12 @@ export async function getCommentList(postId) {
  * @param {object} data - { postId, content }
  */
 export async function createComment(data) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   const commentData = {
     post_id: data.postId,
-    author_id: user.id,
+    author_id: userId,
     content: data.content
   }
 
@@ -311,14 +346,14 @@ export async function createComment(data) {
  * @param {string} commentId - 评论ID
  */
 export async function deleteComment(commentId) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   const { error } = await supabase
     .from(TABLES.COMMENTS)
     .delete()
     .eq('id', commentId)
-    .eq('author_id', user.id)
+    .eq('author_id', userId)
 
   if (error) throw error
 
@@ -335,14 +370,14 @@ export async function deleteComment(commentId) {
  * @param {string} postId - 帖子ID
  */
 export async function toggleLike(postId) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   // 检查是否已点赞
   const { data: existingLike } = await supabase
     .from(TABLES.LIKES)
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('post_id', postId)
     .single()
 
@@ -351,7 +386,7 @@ export async function toggleLike(postId) {
     await supabase
       .from(TABLES.LIKES)
       .delete()
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('post_id', postId)
 
     // 减少点赞数
@@ -366,7 +401,7 @@ export async function toggleLike(postId) {
     await supabase
       .from(TABLES.LIKES)
       .insert({
-        user_id: user.id,
+        user_id: userId,
         post_id: postId
       })
 
@@ -385,13 +420,13 @@ export async function toggleLike(postId) {
  * @param {string} postId - 帖子ID
  */
 export async function checkLike(postId) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { liked: false }
+  const userId = await getCurrentUserId()
+  if (!userId) return { liked: false }
 
   const { data } = await supabase
     .from(TABLES.LIKES)
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('post_id', postId)
     .single()
 
@@ -405,13 +440,13 @@ export async function checkLike(postId) {
  * 获取用户点赞的帖子列表
  */
 export async function getLikedPosts() {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { code: 0, data: [] }
+  const userId = await getCurrentUserId()
+  if (!userId) return { code: 0, data: [] }
 
   const { data, error } = await supabase
     .from(TABLES.LIKES)
     .select(`post_id, ${TABLES.POSTS}(*)`)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
 
   if (error) throw error
 
@@ -451,7 +486,7 @@ export async function getCourseList(params = {}) {
  * @param {string} courseId - 课程ID
  */
 export async function getCourseDetail(courseId) {
-  const { data: { user } } = await supabase.auth.getUser()
+  const userId = await getCurrentUserId()
 
   // 获取课程信息
   const { data: course, error } = await supabase
@@ -464,11 +499,11 @@ export async function getCourseDetail(courseId) {
 
   // 如果用户已登录，检查是否已购买
   let purchased = false
-  if (user) {
+  if (userId) {
     const { data: purchase } = await supabase
       .from(TABLES.COURSE_PURCHASES)
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('course_id', courseId)
       .single()
 
@@ -489,14 +524,14 @@ export async function getCourseDetail(courseId) {
  * @param {string} courseId - 课程ID
  */
 export async function purchaseCourse(courseId) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   // 检查是否已购买
   const { data: existing } = await supabase
     .from(TABLES.COURSE_PURCHASES)
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('course_id', courseId)
     .single()
 
@@ -518,7 +553,7 @@ export async function purchaseCourse(courseId) {
   const { data: profile } = await supabase
     .from(TABLES.PROFILES)
     .select('gold_count')
-    .eq('id', user.id)
+    .eq('id', userId)
     .single()
 
   if (!profile || profile.gold_count < course.price) {
@@ -529,12 +564,12 @@ export async function purchaseCourse(courseId) {
   await supabase
     .from(TABLES.PROFILES)
     .update({ gold_count: profile.gold_count - course.price })
-    .eq('id', user.id)
+    .eq('id', userId)
 
   await supabase
     .from(TABLES.COURSE_PURCHASES)
     .insert({
-      user_id: user.id,
+      user_id: userId,
       course_id: courseId
     })
 
@@ -551,14 +586,14 @@ export async function purchaseCourse(courseId) {
  * @param {string} followingId - 被关注用户ID
  */
 export async function toggleFollow(followingId) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   // 检查是否已关注
   const { data: existing } = await supabase
     .from(TABLES.FOLLOWS)
     .select('*')
-    .eq('follower_id', user.id)
+    .eq('follower_id', userId)
     .eq('following_id', followingId)
     .single()
 
@@ -567,7 +602,7 @@ export async function toggleFollow(followingId) {
     await supabase
       .from(TABLES.FOLLOWS)
       .delete()
-      .eq('follower_id', user.id)
+      .eq('follower_id', userId)
       .eq('following_id', followingId)
 
     return {
@@ -579,7 +614,7 @@ export async function toggleFollow(followingId) {
     await supabase
       .from(TABLES.FOLLOWS)
       .insert({
-        follower_id: user.id,
+        follower_id: userId,
         following_id: followingId
       })
 
@@ -650,8 +685,8 @@ export async function getUserProfile(userId) {
  * @param {object} data - 更新数据
  */
 export async function updateUserProfile(data) {
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('请先登录')
+  const userId = await getCurrentUserId()
+  if (!userId) throw new Error('请先登录')
 
   const { data: profile, error } = await supabase
     .from(TABLES.PROFILES)
@@ -659,7 +694,7 @@ export async function updateUserProfile(data) {
       ...data,
       updated_at: new Date().toISOString()
     })
-    .eq('id', user.id)
+    .eq('id', userId)
     .select()
     .single()
 

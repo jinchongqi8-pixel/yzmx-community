@@ -175,7 +175,7 @@ const router = createRouter({
 // 导入 Supabase 客户端
 import { supabase } from '../supabase/client'
 
-// 路由守卫 - 使用 Supabase Auth 验证
+// 路由守卫 - 使用 Supabase Auth 验证（开发模式兼容）
 router.beforeEach(async (to, from, next) => {
   // 如果是登录页，直接放行
   if (to.path === '/login') {
@@ -185,8 +185,15 @@ router.beforeEach(async (to, from, next) => {
 
   // 需要登录的页面
   if (to.meta.requiresAuth) {
-    const { data: { session } } = await supabase.auth.getSession()
+    // 开发模式：检查 localStorage
+    const devUserId = localStorage.getItem('devUserId')
+    if (devUserId) {
+      next()
+      return
+    }
 
+    // 生产模式：检查 Supabase session
+    const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
       // 未登录，跳转到登录页
       next('/login')
