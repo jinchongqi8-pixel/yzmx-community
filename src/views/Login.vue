@@ -56,90 +56,98 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { createNotification } from '../utils/notification'
+import { supabase } from '../supabase/client'
+import { TABLES } from '../supabase/client'
 
 const routerInstance = useRouter()
 const phone = ref('')
 const code = ref('')
 const countdown = ref(0)
+const loading = ref(false)
 
-const sendCode = () => {
+const sendCode = async () => {
   if (!phone.value || phone.value.length !== 11) {
     alert('请输入正确的手机号')
     return
   }
 
-  alert('验证码已发送！')
-  countdown.value = 60
-  const timer = setInterval(() => {
-    countdown.value--
-    if (countdown.value <= 0) {
-      clearInterval(timer)
+  try {
+    // 发送 OTP 到手机
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: '+86' + phone.value
+    })
+
+    if (error) {
+      // 开发模式：忽略短信发送错误，因为可能没配置短信服务
+      console.log('OTP 发送（开发模式）:', error.message)
     }
-  }, 1000)
+
+    alert('验证码已发送！')
+    countdown.value = 60
+    const timer = setInterval(() => {
+      countdown.value--
+      if (countdown.value <= 0) {
+        clearInterval(timer)
+      }
+    }, 1000)
+  } catch (e) {
+    console.error('发送验证码失败:', e)
+    // 开发模式继续
+    countdown.value = 60
+    alert('开发模式：验证码已发送（模拟）')
+  }
 }
 
-const login = () => {
+const login = async () => {
   if (!phone.value || !code.value) {
     alert('请输入手机号和验证码')
     return
   }
 
-  // 使用手机号作为固定的用户ID，确保每次登录ID一致
-  const userId = 'user_' + phone.value
-
-  // 从users数组中查找用户
-  const users = JSON.parse(localStorage.getItem('users') || '[]')
-  let userInfo = users.find(u => u._id === userId)
-
-  if (userInfo) {
-    // 找到了用户，使用已保存的信息（包括修改过的昵称、头像等）
-    console.log('找到已存在的用户:', userInfo)
-  } else {
-    // 新用户，创建并保存
-    userInfo = createNewUser(userId, phone.value)
-    users.push(userInfo)
-    localStorage.setItem('users', JSON.stringify(users))
-    console.log('创建新用户:', userInfo)
-
-    // 发送欢迎通知
-    createWelcomeNotification(userInfo)
+  if (code.value.length !== 6) {
+    alert('请输入6位验证码')
+    return
   }
 
-  localStorage.setItem('token', 'dev_token_' + Date.now())
-  localStorage.setItem('userInfo', JSON.stringify(userInfo))
+  loading.value = true
 
-  alert('登录成功！')
-  routerInstance.push('/community')
-}
+  try {
+    // 使用 OTP 验证登录
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone: '+86' + phone.value,
+      token: code.value,
+      type: 'sms'
+    })
 
-// 创建新用户
-const createNewUser = (userId, phone) => {
-  return {
-    _id: userId,
-    phone: phone,
-    nickname: '用户' + phone.substr(-4),
-    avatar: '',
-    coins: 1000,
-    level: 1,
-    postsCount: 0,
-    likesCount: 0,
-    checkInDays: 0,
-    registerTime: Date.now() // 记录注册时间
+    if (error) throw error
+
+    // 检查用户 profile 是否存在
+    const { data: profile } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .eq('id', data.user.id)
+      .single()
+
+    if (!profile) {
+      // 新用户，创建 profile
+      await supabase
+        .from(TABLES.PROFILES)
+        .insert({
+          id: data.user.id,
+          nickname: '用户' + phone.value.substr(-4),
+          phone: phone.value,
+          gold_count: 100
+        })
+    }
+
+    alert('登录成功！')
+    routerInstance.push('/community')
+  } catch (error) {
+    console.error('登录失败:', error)
+    alert('登录失败：' + error.message)
+  } finally {
+    loading.value = false
   }
-}
-
-// 发送欢迎通知
-const createWelcomeNotification = (user) => {
-  createNotification(user._id, {
-    type: 'welcome',
-    userId: 'system',
-    userName: '系统',
-    userAvatar: '',
-    postId: '',
-    content: '欢迎加入颜祖美学社群，在这里我们一起蜕变 💪✨',
-    postContent: '开始你的学习之旅吧~'
-  })
 }
 </script>
 

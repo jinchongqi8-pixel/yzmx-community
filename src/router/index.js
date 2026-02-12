@@ -172,15 +172,30 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫 - 暂时关闭登录验证
-// router.beforeEach((to, from, next) => {
-//   const token = localStorage.getItem('token')
-//
-//   if (to.meta.requiresAuth && !token) {
-//     next('/login')
-//   } else {
-//     next()
-//   }
-// })
+// 导入 Supabase 客户端
+import { supabase } from '../supabase/client'
+
+// 路由守卫 - 使用 Supabase Auth 验证
+router.beforeEach(async (to, from, next) => {
+  // 如果是登录页，直接放行
+  if (to.path === '/login') {
+    next()
+    return
+  }
+
+  // 需要登录的页面
+  if (to.meta.requiresAuth) {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session) {
+      // 未登录，跳转到登录页
+      next('/login')
+    } else {
+      next()
+    }
+  } else {
+    next()
+  }
+})
 
 export default router
