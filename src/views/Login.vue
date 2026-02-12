@@ -138,6 +138,18 @@ const login = async () => {
     // 存储用户ID到本地（开发模式）
     localStorage.setItem('devUserId', devUserId)
 
+    // 设置用户信息供其他页面使用
+    const userInfo = {
+      _id: devUserId,
+      nickname: profile?.nickname || '用户' + phone.value.substr(-4),
+      phone: phone.value,
+      avatar: profile?.avatar || '',
+      coins: profile?.gold_count || 100,
+      level: profile?.level || 1,
+      isAdmin: false
+    }
+    localStorage.setItem('userInfo', JSON.stringify(userInfo))
+
     alert('登录成功！（开发模式）')
     routerInstance.push('/community')
 
