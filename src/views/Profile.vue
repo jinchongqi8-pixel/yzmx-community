@@ -4,7 +4,7 @@
     <!-- 导航栏 -->
     <nav class="navbar">
       <div class="nav-content">
-        <h1 class="logo">📚 梦祖美学</h1>
+        <h1 class="logo">📚 颜祖美学</h1>
         <div class="nav-links">
           <router-link to="/community" class="nav-link">社群</router-link>
           <router-link to="/course" class="nav-link">课程</router-link>
@@ -27,23 +27,20 @@
         计算后帖子数: {{ debugInfo.calculatedCount }}<br>
         总获赞数: {{ userInfo?.likesCount || 0 }}<br>
         <strong>管理员状态: {{ userInfo?.isAdmin ? '✅ 是管理员' : '❌ 不是管理员' }}</strong><br>
+        <div v-if="!userInfo?.isAdmin && canBeAdmin" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #ddd;">
+          <input
+            v-model="adminCode"
+            type="text"
+            placeholder="输入管理员验证码"
+            style="padding: 8px; margin-right: 8px; border: 1px solid #ccc; border-radius: 4px;"
+          />
+          <button @click="verifyAndSetAdmin" style="padding: 8px 16px; background: #0ea5e9; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            🔓 验证并设置为管理员
+          </button>
+          <p style="margin: 8px 0 0 0; font-size: 12px; color: #666;">提示：验证码是 admin123</p>
+        </div>
       </div>
 
-      <!-- 管理员入口 -->
-      <div v-if="userInfo?.isAdmin && canBeAdmin" style="margin-top: 12px; padding: 12px; border-top: 1px solid #ddd;">
-        <input
-          v-model="adminCode"
-          type="text"
-          placeholder="输入管理员验证码"
-          style="padding: 8px; margin-right: 8px; border: 1px solid #ccc; border-radius: 4px;"
-        />
-        <button @click="verifyAndSetAdmin" style="padding: 8px 16px; background: #0ea5e9; color: white; border: none; border-radius: 4px; cursor: pointer;">
-          🔓 验证并设置为管理员
-        </button>
-        <p style="margin: 8px 0 0; font-size: 12px; color: #666;">提示：验证码是 admin123</p>
-      </div>
-
-      <!-- 用户信息 -->
       <div v-if="userInfo" class="profile-card">
         <div class="user-header">
           <img :src="userInfo.avatar || '/default-avatar.png'" class="avatar" />
@@ -65,91 +62,90 @@
           </div>
           <div class="header-actions">
             <el-button @click="router.push('/checkin')" type="warning" plain>
-              📅 签到
+              每日签到
             </el-button>
-            <el-button v-if="userInfo.id" @click="logout" type="danger" plain>退出登录</el-button>
+            <el-button v-if="userInfo._id" @click="logout" type="danger" plain>退出登录</el-button>
             <el-button v-else @click="router.push('/login')" type="primary" plain>去登录</el-button>
           </div>
         </div>
-      </div>
 
-      <!-- 数据统计 -->
-      <div class="stats-grid">
-        <div class="stat-item clickable" @click="router.push('/my/posts')">
-          <div class="stat-number">{{ userInfo.postsCount || 0 }}</div>
-          <div class="stat-label">帖子</div>
+        <div class="stats-grid">
+          <div class="stat-item clickable" @click="router.push('/my/posts')">
+            <div class="stat-number">{{ userInfo.postsCount || 0 }}</div>
+            <div class="stat-label">帖子</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">{{ userInfo.likesCount || 0 }}</div>
+            <div class="stat-label">获赞</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number">{{ userInfo.checkInDays || 0 }}</div>
+            <div class="stat-label">打卡天数</div>
+          </div>
+          <div class="stat-item clickable" @click="router.push('/gold/logs')">
+            <div class="stat-number">{{ userInfo.coins || 0 }}</div>
+            <div class="stat-label">金币</div>
+          </div>
         </div>
-        <div class="stat-item">
-          <div class="stat-number">{{ userInfo.likesCount || 0 }}</div>
-          <div class="stat-label">获赞</div>
-        </div>
-        <div class="stat-item">
-          <div class="stat-number">{{ userInfo.checkInDays || 0 }}</div>
-          <div class="stat-label">打卡天数</div>
-        </div>
-        <div class="stat-item clickable" @click="router.push('/gold/logs')">
-          <div class="stat-number">{{ userInfo.coins || 0 }}</div>
-          <div class="stat-label">金币</div>
-        </div>
-      </div>
 
-      <!-- 功能菜单 -->
-      <div class="menu-section">
-        <div class="menu-item" @click="router.push('/my/posts')">
-          <span class="menu-icon">📝</span>
-          <span class="menu-text">我的帖子</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="router.push('/collections')">
-          <span class="menu-icon">⭐</span>
-          <span class="menu-text">我的收藏</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="goToFollowers">
-          <span class="menu-icon">👥</span>
-          <span class="menu-text">我的粉丝</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="goToFollowing">
-          <span class="menu-icon">➕</span>
-          <span class="menu-text">我的关注</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="router.push('/messages')">
-          <span class="menu-icon">💬</span>
-          <span class="menu-text">私信</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="router.push('/topic-square')">
-          <span class="menu-icon">#️⃣</span>
-          <span class="menu-text">话题广场</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="router.push('/leaderboard')">
-          <span class="menu-icon">🏆</span>
-          <span class="menu-text">排行榜</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="router.push('/history')">
-          <span class="menu-icon">🕐</span>
-          <span class="menu-text">浏览历史</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="router.push('/notification')">
-          <span class="menu-icon">🔔</span>
-          <span class="menu-text">消息通知</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <div class="menu-item" @click="router.push('/profile/edit')">
-          <span class="menu-icon">✏️</span>
-          <span class="menu-text">编辑资料</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
-        </div>
-        <!-- 管理员入口 -->
-        <div v-if="userInfo?.isAdmin" class="menu-item admin-entry" @click="router.push('/admin')">
-          <span class="menu-icon">🛡️</span>
-          <span class="menu-text">管理员后台</span>
-          <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+        <!-- 功能菜单 -->
+        <div class="menu-section">
+          <div class="menu-item" @click="router.push('/my/posts')">
+            <span class="menu-icon">📝</span>
+            <span class="menu-text">我的帖子</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="router.push('/collections')">
+            <span class="menu-icon">⭐</span>
+            <span class="menu-text">我的收藏</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="router.push('/topic-square')">
+            <span class="menu-icon">#️⃣</span>
+            <span class="menu-text">话题广场</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="router.push('/leaderboard')">
+            <span class="menu-icon">🏆</span>
+            <span class="menu-text">排行榜</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="goToFollowers">
+            <span class="menu-icon">👥</span>
+            <span class="menu-text">我的粉丝</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="goToFollowing">
+            <span class="menu-icon">➕</span>
+            <span class="menu-text">我的关注</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="router.push('/messages')">
+            <span class="menu-icon">💬</span>
+            <span class="menu-text">私信</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="router.push('/history')">
+            <span class="menu-icon">🕐</span>
+            <span class="menu-text">浏览历史</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="router.push('/notification')">
+            <span class="menu-icon">🔔</span>
+            <span class="menu-text">消息通知</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <div class="menu-item" @click="router.push('/profile/edit')">
+            <span class="menu-icon">✏️</span>
+            <span class="menu-text">编辑资料</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
+          <!-- 管理员入口 -->
+          <div v-if="userInfo.isAdmin" class="menu-item admin-entry" @click="router.push('/admin')">
+            <span class="menu-icon">🛡️</span>
+            <span class="menu-text">管理员后台</span>
+            <el-icon class="menu-arrow"><ArrowRight /></el-icon>
+          </div>
         </div>
       </div>
     </main>
@@ -161,7 +157,6 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
-import { supabase } from '../supabase/client'
 import AnnouncementBanner from '../components/AnnouncementBanner.vue'
 
 const router = useRouter()
@@ -187,86 +182,96 @@ const debugInfo = ref({
   calculatedCount: 0
 })
 
-// 从 Supabase 获取当前用户信息
+// 加载用户信息
 const loadUserInfo = () => {
-  supabase.auth.getUser().then(({ data: { user } }) => {
-    if (!user) {
-      // 未登录
-      userInfo.value = null
-      debugInfo.value.userId = '未登录'
-      debugInfo.value.nickname = '未登录'
-      return
+  const info = localStorage.getItem('userInfo')
+
+  if (info) {
+    userInfo.value = JSON.parse(info)
+
+    // 更新调试信息
+    debugInfo.value.userId = userInfo.value._id || '无ID'
+    debugInfo.value.nickname = userInfo.value.nickname || '无昵称'
+
+    // 计算实际的帖子数量和点赞数
+    let allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
+    debugInfo.value.totalPosts = allPosts.length
+
+    // 第一步：尝试用 userId 匹配
+    let myPosts = allPosts.filter(p => p.userId === userInfo.value._id)
+
+    // 第二步：如果找不到，尝试用手机号匹配
+    if (myPosts.length === 0 && userInfo.value.phone) {
+      const phoneUserId = 'user_' + userInfo.value.phone
+      myPosts = allPosts.filter(p => p.userId === phoneUserId)
+
+      // 如果找到了，更新这些帖子的 userId
+      if (myPosts.length > 0) {
+        allPosts = allPosts.map(p => {
+          if (!p.userId || p.userId === phoneUserId) {
+            return { ...p, userId: userInfo.value._id }
+          }
+          return p
+        })
+        // 保存更新后的帖子
+        localStorage.setItem('posts', JSON.stringify(allPosts))
+      }
     }
 
-    // 从 profiles 表获取用户详细信息
-    supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single()
-      .then(({ data: profile }) => {
-        if (profile) {
-          userInfo.value = profile
-          debugInfo.value.userId = profile.id || '无ID'
-          debugInfo.value.nickname = profile.nickname || '无昵称'
-          debugInfo.value.totalPosts = 0  // TODO: 从数据库获取
-          debugInfo.value.myPostsCount = 0  // TODO: 从数据库获取
-          debugInfo.value.calculatedCount = 0  // TODO: 从数据库获取
-        } else {
-          // 用户不存在，创建一个
-          const nickname = '用户' + user.id?.substr(-4) || ''
-          supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              nickname: nickname,
-              gold_count: 100
-            })
-            .then(({ data }) => {
-              const newProfile = {
-                id: user.id,
-                nickname: nickname,
-                gold_count: 100
-              }
-              userInfo.value = newProfile
-              debugInfo.value.userId = user.id
-              debugInfo.value.nickname = nickname
-            })
-        }
-      })
-  .catch((error) => {
-    console.error('获取用户信息失败:', error)
-  })
-}
+    // 第三步：如果还是找不到，尝试用昵称匹配（兼容最老的数据）
+    if (myPosts.length === 0) {
+      myPosts = allPosts.filter(p =>
+        p.userName === userInfo.value.nickname ||
+        p.userName === '我' ||
+        !p.userId
+      )
 
-// 验证并设置为管理员
-const verifyAndSetAdmin = () => {
-  if (adminCode.value !== ADMIN_SECRET_CODE) {
-    ElMessage.error('验证码错误')
-    return
-  }
+      // 更新这些帖子的 userId
+      if (myPosts.length > 0) {
+        allPosts = allPosts.map(p => {
+          if (myPosts.includes(p)) {
+            return { ...p, userId: userInfo.value._id }
+          }
+          return p
+        })
+        localStorage.setItem('posts', JSON.stringify(allPosts))
+      }
+    }
 
-  const updateProfile = await supabase
-    .from('profiles')
-    .update({ isAdmin: true })
-    .eq('id', userInfo.value.id)
+    debugInfo.value.myPostsCount = myPosts.length
 
-  if (updateProfile.error) {
-    ElMessage.error('设置失败')
+    // 更新帖子数量
+    userInfo.value.postsCount = myPosts.length
+    debugInfo.value.calculatedCount = myPosts.length
+
+    // 计算总点赞数（遍历所有帖子，累加点赞数）
+    const totalLikes = myPosts.reduce((sum, post) => {
+      // 点赞数可能是 post.likes 或 post.likeCount
+      const postLikes = post.likes || post.likeCount || 0
+      return sum + postLikes
+    }, 0)
+
+    userInfo.value.likesCount = totalLikes
+
+    // 计算粉丝和关注数量
+    const follows = JSON.parse(localStorage.getItem('follows') || '[]')
+    const followersCount = follows.filter(f => f.followingId === userInfo.value._id).length
+    const followingCount = follows.filter(f => f.userId === userInfo.value._id).length
+
+    userInfo.value.followersCount = followersCount
+    userInfo.value.followingCount = followingCount
   } else {
-    ElMessage.success('已设置为管理员')
-    userInfo.value.isAdmin = true
+    // 如果没有用户信息，设置默认值
+    userInfo.value = {
+      nickname: '未登录',
+      avatar: '',
+      coins: 0,
+      level: 1,
+      postsCount: 0,
+      likesCount: 0,
+      checkInDays: 0
+    }
   }
-}
-
-// 跳转到粉丝列表
-const goToFollowers = () => {
-  router.push('/user/' + userInfo.value.id + '/followers')
-}
-
-// 跳转到关注列表
-const goToFollowing = () => {
-  router.push('/user/' + userInfo.value.id + '/following')
 }
 
 // 退出登录
@@ -278,10 +283,42 @@ const logout = () => {
   }).then(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('userInfo')
-    supabase.auth.signOut()
     ElMessage.success('已退出登录')
     router.push('/login')
   }).catch(() => {})
+}
+
+// 验证并设置为管理员
+const verifyAndSetAdmin = () => {
+  if (adminCode.value !== ADMIN_SECRET_CODE) {
+    ElMessage.error('验证码错误！')
+    adminCode.value = ''
+    return
+  }
+
+  if (userInfo.value) {
+    userInfo.value.isAdmin = true
+    localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
+    ElMessage.success('验证成功！已设置为管理员')
+  }
+}
+
+// 跳转到粉丝列表
+const goToFollowers = () => {
+  if (!userInfo.value || !userInfo.value._id) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  router.push(`/user/${userInfo.value._id}/followers`)
+}
+
+// 跳转到关注列表
+const goToFollowing = () => {
+  if (!userInfo.value || !userInfo.value._id) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  router.push(`/user/${userInfo.value._id}/following`)
 }
 
 onMounted(() => {
@@ -292,20 +329,57 @@ onMounted(() => {
 <style scoped>
 .profile-container {
   min-height: 100vh;
-  background: linear-gradient(to bottom, #f8fafc 0%, #ffffff 100%);
+  background: linear-gradient(to bottom, #f0f4f8 0%, #ffffff 100%);
+  position: relative;
+}
+
+/* 背景装饰 */
+.profile-container::before {
+  content: '';
+  position: fixed;
+  top: -30%;
+  right: -5%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.profile-container::after {
+  content: '';
+  position: fixed;
+  bottom: -20%;
+  left: -5%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .navbar {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  transition: all 0.3s ease;
+}
+
+.navbar:hover {
   background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .nav-content {
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 20px;
   height: 56px;
   display: flex;
   align-items: center;
@@ -313,7 +387,153 @@ onMounted(() => {
 }
 
 .logo {
-  font-size: 20px;
+  font-size: 24px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #f43f5e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.5px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 32px;
+}
+
+.nav-link {
+  color: #64748b;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  width: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #8b5cf6, #ec4899);
+  transform: translateX(-50%);
+  transition: width 0.3s ease;
+}
+
+.nav-link:hover::after,
+.nav-link.router-link-active::after {
+  width: 100%;
+}
+
+.nav-link:hover,
+.nav-link.router-link-active {
+  color: #8b5cf6;
+}
+
+.main-content {
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 0 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.profile-card {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(241, 245, 249, 0.8);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.profile-card:hover {
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.12);
+  transform: translateY(-2px);
+}
+
+.user-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin-right: 20px;
+  border: 3px solid transparent;
+  background: linear-gradient(white, white) padding-box,
+              linear-gradient(135deg, #8b5cf6, #ec4899) border-box;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.avatar::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #ec4899, #f43f5e);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  filter: blur(8px);
+}
+
+.avatar:hover {
+  transform: scale(1.1);
+  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.3);
+}
+
+.avatar:hover::after {
+  opacity: 0.6;
+}
+
+.user-info {
+  flex: 1;
+}
+
+.user-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.name-with-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.inline-stats {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.inline-stat {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.inline-stat:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(236, 72, 153, 0.08));
+  transform: translateY(-2px);
+}
+
+.stat-number-small {
+  font-size: 14px;
   font-weight: 700;
   background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
   -webkit-background-clip: text;
@@ -321,214 +541,183 @@ onMounted(() => {
   background-clip: text;
 }
 
-.nav-links {
-  display: flex;
-  gap: 8px;
-}
-
-.nav-link {
-  text-decoration: none;
-  color: #64748b;
-  font-size: 14px;
-  transition: all 0.2s;
-  padding: 6px 12px;
-  border-radius: 8px;
-}
-
-.nav-link:hover,
-.nav-link.router-link-active {
-  color: #8b5cf6;
-  background: #f1f5f9;
-}
-
-.main-content {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.debug-info {
-  background: #fff3cd;
-  padding: 16px;
-  margin-bottom: 20px;
-  border-radius: 8px;
-  font-size: 14px;
-}
-
-.profile-card {
-  background: white;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.user-header {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid #f1f5f9;
-}
-
-.user-info {
-  flex: 1;
-}
-
-.name-with-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.user-name {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.inline-stats {
-  display: flex;
-  gap: 16px;
-}
-
-.inline-stat {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.inline-stat:hover {
-  background: #f1f5f9;
-}
-
-.stat-number-small {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1e293b;
-}
-
 .stat-label-small {
   font-size: 12px;
-  color: #64748b;
+  color: #94a3b8;
 }
 
 .user-bio {
-  font-size: 14px;
+  font-size: 15px;
   color: #64748b;
-  margin: 0;
 }
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
 }
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
 }
 
 .stat-item {
-  background: white;
-  padding: 20px;
-  border-radius: 12px;
   text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(236, 72, 153, 0.05));
+  border-radius: 16px;
+  border: 1px solid rgba(241, 245, 249, 0.8);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
 
-.stat-item:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+.stat-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(236, 72, 153, 0.1));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stat-item:hover::before {
+  opacity: 1;
 }
 
 .stat-number {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1e293b;
+  font-size: 32px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 8px;
+  position: relative;
+  z-index: 1;
 }
 
 .stat-label {
   font-size: 14px;
   color: #64748b;
-  margin-top: 8px;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
+}
+
+.stat-item.clickable {
+  cursor: pointer;
+}
+
+.stat-item.clickable:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 20px rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.3);
 }
 
 .menu-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  margin-top: 24px;
+  background: white;
+  border-radius: 16px;
+  padding: 12px 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(241, 245, 249, 0.8);
+  overflow: hidden;
 }
 
 .menu-item {
   display: flex;
   align-items: center;
-  padding: 16px;
-  background: white;
-  border-radius: 12px;
+  padding: 16px 24px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.menu-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(236, 72, 153, 0.1));
+  transition: width 0.3s ease;
+}
+
+.menu-item:hover::before {
+  width: 4px;
 }
 
 .menu-item:hover {
-  background: #f8fafc;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.05), transparent);
   transform: translateX(4px);
 }
 
 .menu-icon {
   font-size: 20px;
-  flex-shrink: 0;
+  margin-right: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .menu-text {
   flex: 1;
   font-size: 15px;
   color: #334155;
+  font-weight: 500;
+  position: relative;
+  z-index: 1;
 }
 
 .menu-arrow {
-  color: #9ca3af;
+  color: #cbd5e1;
+  transition: all 0.3s ease;
 }
 
-/* 响应式 */
-@media (max-width: 768px) {
-  .nav-links {
-    gap: 4px;
-  }
+.menu-item:hover .menu-arrow {
+  color: #8b5cf6;
+  transform: translateX(4px);
+}
 
-  .nav-link {
-    padding: 4px 8px;
-    font-size: 12px;
-  }
+.admin-entry {
+  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%);
+  border-radius: 12px;
+  margin-top: 8px;
+  position: relative;
+  overflow: hidden;
+}
 
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
+.admin-entry::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
 
-  .avatar {
-    width: 60px;
-    height: 60px;
-  }
+.admin-entry:hover::before {
+  transform: translateX(100%);
+}
 
-  .user-name {
-    font-size: 20px;
-  }
+.admin-entry .menu-text {
+  color: white;
+  font-weight: 700;
+}
 
-  .name-with-stats {
-    flex-direction: column;
-  }
+.admin-entry .menu-icon {
+  font-size: 24px;
+}
+
+.admin-entry:hover {
+  opacity: 0.95;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
+}
+
+.loading {
+  padding: 40px;
 }
 </style>
