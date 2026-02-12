@@ -188,12 +188,9 @@ const debugInfo = ref({
 })
 
 // 从 Supabase 获取当前用户信息
-const loadUserInfo = async () => {
-  try {
-    // 从 Supabase Auth 获取当前用户
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-    if (authError || !user) {
+const loadUserInfo = () => {
+  supabase.auth.getUser().then(({ data: { user } }) => {
+    if (!user) {
       // 未登录
       userInfo.value = null
       debugInfo.value.userId = '未登录'
@@ -202,47 +199,44 @@ const loadUserInfo = async () => {
     }
 
     // 从 profiles 表获取用户详细信息
-    const { data: profile, error: profileError } = await supabase
+    supabase
       .from('profiles')
       .select('*')
       .eq('id', user.id)
       .single()
-
-    if (profileError) {
-      throw profileError
-    }
-
-    if (profile) {
-      userInfo.value = profile
-      debugInfo.value.userId = profile.id || '无ID'
-      debugInfo.value.nickname = profile.nickname || '无昵称'
-      debugInfo.value.totalPosts = 0  // TODO: 从数据库获取
-      debugInfo.value.myPostsCount = 0  // TODO: 从数据库获取
-      debugInfo.value.calculatedCount = 0  // TODO: 从数据库获取
-    } else {
-      // 用户不存在，创建一个
-      const nickname = '用户' + user.id?.substr(-4) || ''
-      const { error: insertError } = await supabase
-        .from('profiles')
-        .insert({
-          id: user.id,
-          nickname: nickname,
-          gold_count: 100
-        })
-
-      if (!insertError) {
-        userInfo.value = {
-          id: user.id,
-          nickname: nickname,
-          gold_count: 100
+      .then(({ data: profile }) => {
+        if (profile) {
+          userInfo.value = profile
+          debugInfo.value.userId = profile.id || '无ID'
+          debugInfo.value.nickname = profile.nickname || '无昵称'
+          debugInfo.value.totalPosts = 0  // TODO: 从数据库获取
+          debugInfo.value.myPostsCount = 0  // TODO: 从数据库获取
+          debugInfo.value.calculatedCount = 0  // TODO: 从数据库获取
+        } else {
+          // 用户不存在，创建一个
+          const nickname = '用户' + user.id?.substr(-4) || ''
+          supabase
+            .from('profiles')
+            .insert({
+              id: user.id,
+              nickname: nickname,
+              gold_count: 100
+            })
+            .then(({ data }) => {
+              const newProfile = {
+                id: user.id,
+                nickname: nickname,
+                gold_count: 100
+              }
+              userInfo.value = newProfile
+              debugInfo.value.userId = user.id
+              debugInfo.value.nickname = nickname
+            })
         }
-        debugInfo.value.userId = user.id
-        debugInfo.value.nickname = nickname
-      }
-    }
-  } catch (error) {
+      })
+  .catch((error) => {
     console.error('获取用户信息失败:', error)
-  }
+  })
 }
 
 // 验证并设置为管理员
