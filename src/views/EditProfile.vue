@@ -98,6 +98,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
+import { updateUserProfile } from '../api/cloud'
 
 const router = useRouter()
 const saving = ref(false)
@@ -113,8 +114,21 @@ const form = reactive({
   location: ''
 })
 
+// 获取当前用户ID
+const getCurrentUserId = () => {
+  return localStorage.getItem('devUserId') || ''
+}
+
 // 加载用户信息
-const loadUserInfo = () => {
+const loadUserInfo = async () => {
+  const userId = getCurrentUserId()
+  if (!userId) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+
+  // 从 localStorage 读取基本信息
   const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
   Object.assign(form, {
     avatar: userInfo.avatar || '',
@@ -169,195 +183,33 @@ const saveProfile = async () => {
   saving.value = true
 
   try {
-    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-    const oldNickname = userInfo.nickname
-    const newNickname = form.nickname
-    const oldAvatar = userInfo.avatar
-    const newAvatar = form.avatar
+    // 调用 Supabase API 更新用户资料
+    const res = await updateUserProfile({
+      nickname: form.nickname,
+      bio: form.bio,
+      avatar: form.avatar,
+      gender: form.gender,
+      location: form.location
+    })
 
-    // 更新本地存储
-    const updatedUserInfo = {
-      ...userInfo,
-      ...form
+    if (res.code === 0) {
+      // 更新本地存储
+      const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
+      const updatedUserInfo = {
+        ...userInfo,
+        ...form
+      }
+      localStorage.setItem('userInfo', JSON.stringify(updatedUserInfo))
+
+      ElMessage.success('保存成功')
+      router.back()
     }
-    localStorage.setItem('userInfo', JSON.stringify(updatedUserInfo))
-
-    // 同时更新users数组中的用户信息
-    const users = JSON.parse(localStorage.getItem('users') || '[]')
-    const userIndex = users.findIndex(u => u._id === userInfo._id)
-    if (userIndex !== -1) {
-      users[userIndex] = updatedUserInfo
-      localStorage.setItem('users', JSON.stringify(users))
-    }
-
-    // 如果昵称有变化，更新所有相关帖子和评论
-    if (oldNickname !== newNickname) {
-      updateAllNames(userInfo._id, newNickname)
-    }
-
-    // 如果头像有变化，更新所有帖子和评论中的头像
-    if (oldAvatar !== newAvatar && newAvatar) {
-      updateAllAvatars(userInfo._id, newAvatar)
-    }
-
-    ElMessage.success('保存成功')
-    router.back()
   } catch (error) {
     console.error('保存失败:', error)
     ElMessage.error('保存失败，请重试')
   } finally {
     saving.value = false
   }
-}
-
-// 统一更新所有数据中的用户名
-const updateAllNames = (userId, newNickname) => {
-  // 1. 更新帖子中的用户名
-  const posts = JSON.parse(localStorage.getItem('posts') || '[]')
-
-  // 如果没有帖子，直接返回
-  if (!posts || posts.length === 0) {
-    console.log('没有帖子需要更新')
-    return
-  }
-
-  let postsUpdated = false
-
-  posts.forEach(post => {
-    // 更新帖子作者名
-    if (post.userId === userId) {
-      post.userName = newNickname
-      postsUpdated = true
-    }
-
-    // 更新评论中的用户名
-    if (post.comments && post.comments.length > 0) {
-      post.comments.forEach(comment => {
-        if (comment.userId === userId) {
-          comment.userName = newNickname
-          postsUpdated = true
-        }
-        // 更新回复中的用户名
-        if (comment.replies && comment.replies.length > 0) {
-          comment.replies.forEach(reply => {
-            if (reply.userId === userId) {
-              reply.userName = newNickname
-              postsUpdated = true
-            }
-          })
-        }
-      })
-    }
-  })
-
-  // 无论是否更新，都保存posts数据（防止数据丢失）
-  localStorage.setItem('posts', JSON.stringify(posts))
-
-  // 2. 更新所有用户的通知列表
-  const notifKeys = Object.keys(localStorage).filter(key => key.startsWith('notifications_'))
-
-  notifKeys.forEach(key => {
-    const notifications = JSON.parse(localStorage.getItem(key) || '[]')
-    let notifUpdated = false
-
-    notifications.forEach(notif => {
-      if (notif.userId === userId) {
-        notif.userName = newNickname
-        notifUpdated = true
-      }
-    })
-
-    if (notifUpdated) {
-      localStorage.setItem(key, JSON.stringify(notifications))
-    }
-  })
-
-  // 3. 更新浏览历史中的用户名
-  const historyKeys = Object.keys(localStorage).filter(key => key.startsWith('history_'))
-
-  historyKeys.forEach(key => {
-    const history = JSON.parse(localStorage.getItem(key) || '[]')
-    let historyUpdated = false
-
-    history.forEach(item => {
-      if (item.userId === userId) {
-        item.userName = newNickname
-        historyUpdated = true
-      }
-    })
-
-    if (historyUpdated) {
-      localStorage.setItem(key, JSON.stringify(history))
-    }
-  })
-}
-
-// 统一更新所有数据中的用户头像
-const updateAllAvatars = (userId, newAvatar) => {
-  // 1. 更新帖子中的用户头像
-  const posts = JSON.parse(localStorage.getItem('posts') || '[]')
-
-  if (!posts || posts.length === 0) {
-    console.log('没有帖子需要更新头像')
-    return
-  }
-
-  posts.forEach(post => {
-    // 更新帖子作者头像
-    if (post.userId === userId) {
-      post.userAvatar = newAvatar
-    }
-
-    // 更新评论中的用户头像
-    if (post.comments && post.comments.length > 0) {
-      post.comments.forEach(comment => {
-        if (comment.userId === userId) {
-          comment.userAvatar = newAvatar
-        }
-        // 更新回复中的用户头像
-        if (comment.replies && comment.replies.length > 0) {
-          comment.replies.forEach(reply => {
-            if (reply.userId === userId) {
-              reply.userAvatar = newAvatar
-            }
-          })
-        }
-      })
-    }
-  })
-
-  // 保存posts
-  localStorage.setItem('posts', JSON.stringify(posts))
-
-  // 2. 更新所有用户的通知列表中的头像
-  const notifKeys = Object.keys(localStorage).filter(key => key.startsWith('notifications_'))
-
-  notifKeys.forEach(key => {
-    const notifications = JSON.parse(localStorage.getItem(key) || '[]')
-
-    notifications.forEach(notif => {
-      if (notif.userId === userId) {
-        notif.userAvatar = newAvatar
-      }
-    })
-
-    localStorage.setItem(key, JSON.stringify(notifications))
-  })
-
-  // 3. 更新浏览历史中的用户头像
-  const historyKeys = Object.keys(localStorage).filter(key => key.startsWith('history_'))
-
-  historyKeys.forEach(key => {
-    const history = JSON.parse(localStorage.getItem(key) || '[]')
-
-    history.forEach(item => {
-      if (item.userId === userId) {
-        item.userAvatar = newAvatar
-      }
-    })
-
-    localStorage.setItem(key, JSON.stringify(history))
-  })
 }
 
 onMounted(() => {

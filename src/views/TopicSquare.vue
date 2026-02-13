@@ -112,17 +112,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, Document, Star } from '@element-plus/icons-vue'
+import { getPostList } from '../api/cloud'
 
 const router = useRouter()
 const loading = ref(true)
 const topics = ref([])
 const followedTopics = ref([])
-
-// 获取当前用户
-const getCurrentUser = () => {
-  const userInfo = localStorage.getItem('userInfo')
-  return userInfo ? JSON.parse(userInfo) : null
-}
 
 // 从帖子内容中提取话题标签
 const extractTopics = (posts) => {
@@ -150,13 +145,13 @@ const extractTopics = (posts) => {
 
       const topic = topicMap.get(topicName)
       topic.postCount++
-      topic.totalLikes += post.likeCount || 0
+      topic.totalLikes += post.like_count || 0
       topic.posts.push(post)
 
       // 保存最新帖子预览
-      if (!topic.latestPost || post.createdAt > topic.latestCreatedAt) {
+      if (!topic.latestPost || post.created_at > topic.latestCreatedAt) {
         topic.latestPost = post.content?.substring(0, 50) + (post.content?.length > 50 ? '...' : '')
-        topic.latestCreatedAt = post.createdAt
+        topic.latestCreatedAt = post.created_at
       }
     }
   })
@@ -165,20 +160,24 @@ const extractTopics = (posts) => {
 }
 
 // 加载话题数据
-const loadTopics = () => {
+const loadTopics = async () => {
   loading.value = true
 
   try {
-    // 读取所有帖子
-    const posts = JSON.parse(localStorage.getItem('posts') || '[]')
+    // 从 Supabase 获取所有帖子
+    const res = await getPostList({ limit: 100 })
+    if (res.code === 0) {
+      const posts = res.data.list || []
+      topics.value = extractTopics(posts)
+    }
 
-    // 提取话题
-    topics.value = extractTopics(posts)
-
-    // 读取用户关注的话题
-    const user = getCurrentUser()
-    if (user && user.followedTopics) {
-      followedTopics.value = user.followedTopics
+    // 读取用户关注的话题（从本地存储）
+    const userInfo = localStorage.getItem('userInfo')
+    if (userInfo) {
+      const user = JSON.parse(userInfo)
+      if (user.followedTopics) {
+        followedTopics.value = user.followedTopics
+      }
     }
   } catch (error) {
     console.error('加载失败:', error)

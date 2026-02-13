@@ -85,6 +85,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { formatTime } from '../utils/formatTime'
+import { getFollowerList, getUserProfile, toggleFollow as toggleFollowApi } from '../api/cloud'
 
 const route = useRoute()
 const router = useRouter()
@@ -92,79 +93,51 @@ const user = ref(null)
 const followers = ref([])
 const loading = ref(true)
 
-// 获取当前用户
-const getCurrentUser = () => {
-  const userInfo = localStorage.getItem('userInfo')
-  return userInfo ? JSON.parse(userInfo) : null
+// 获取当前用户ID
+const getCurrentUserId = () => {
+  return localStorage.getItem('devUserId') || ''
 }
 
 // 加载粉丝列表
-const loadFollowers = () => {
+const loadFollowers = async () => {
   loading.value = true
   try {
     const userId = route.params.id
-    const currentUser = getCurrentUser()
+    const currentUserId = getCurrentUserId()
 
-    // 获取所有关注关系
-    const follows = JSON.parse(localStorage.getItem('follows') || '[]')
+    // 获取粉丝列表
+    const res = await getFollowerList(userId)
+    if (res.code === 0) {
+      const followerList = res.data || []
 
-    // 获取该用户的粉丝（关注了该用户的人）
-    const userFollowers = follows.filter(f => f.followingId === userId)
-
-    // 获取所有用户信息
-    const users = JSON.parse(localStorage.getItem('users') || '[]')
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-
-    // 构建粉丝列表
-    followers.value = userFollowers.map(follow => {
-      const followerUser = users.find(u => u._id === follow.userId)
-
-      // 如果在users中找不到，尝试从帖子中获取基本信息
-      if (!followerUser) {
-        const userPost = allPosts.find(p => p.userId === follow.userId)
-        return {
-          userId: follow.userId,
-          name: userPost?.userName || follow.userName || '未知用户',
-          avatar: userPost?.userAvatar || '',
-          postsCount: 0,
-          followersCount: 0,
-          createdAt: follow.createdAt,
-          isFollowing: false,
-          isCurrentUser: follow.userId === currentUser?._id
-        }
+      // 获取被查看的用户信息
+      const userRes = await getUserProfile(userId)
+      if (userRes.code === 0) {
+        user.value = userRes.data
       }
 
-      // 计算该粉丝的统计数据
-      const followerPosts = allPosts.filter(p => p.userId === follow.userId)
-      const followerFollowers = follows.filter(f => f.followingId === follow.userId).length
-
-      // 检查当前用户是否关注了该粉丝
-      const isFollowing = follows.some(f =>
-        f.userId === currentUser?._id && f.followingId === follow.userId
-      )
-
-      return {
-        userId: follow.userId,
-        name: followerUser.nickname || follow.userName,
-        avatar: followerUser.avatar || '',
-        postsCount: followerPosts.length,
-        followersCount: followerFollowers,
-        createdAt: follow.createdAt,
-        isFollowing: isFollowing,
-        isCurrentUser: follow.userId === currentUser?._id
+      // 获取当前用户的关注列表，用于判断是否已关注
+      const { supabase, TABLES } = await import('../supabase/client')
+      let followingIds = []
+      if (currentUserId) {
+        const { data: followingData } = await supabase
+          .from(TABLES.FOLLOWS)
+          .select('following_id')
+          .eq('follower_id', currentUserId)
+        followingIds = followingData?.map(f => f.following_id) || []
       }
-    })
 
-    // 获取被查看的用户信息
-    const targetUser = users.find(u => u._id === userId)
-    if (targetUser) {
-      user.value = targetUser
-    } else {
-      const userPost = allPosts.find(p => p.userId === userId)
-      user.value = {
-        _id: userId,
-        nickname: userPost?.userName || '未知用户'
-      }
+      // 构建粉丝列表
+      followers.value = followerList.map(follower => ({
+        userId: follower.id,
+        name: follower.nickname || '用户',
+        avatar: follower.avatar || '',
+        postsCount: follower.posts_count || 0,
+        followersCount: follower.followers_count || 0,
+        createdAt: follower.created_at,
+        isFollowing: followingIds.includes(follower.id),
+        isCurrentUser: follower.id === currentUserId
+      }))
     }
   } catch (error) {
     console.error('加载失败:', error)
@@ -176,40 +149,24 @@ const loadFollowers = () => {
 
 // 关注/取消关注
 const toggleFollow = async (follower) => {
-  const currentUser = getCurrentUser()
-  if (!currentUser) {
+  const currentUserId = getCurrentUserId()
+  if (!currentUserId) {
     ElMessage.warning('请先登录')
     router.push('/login')
     return
   }
 
+  if (follower.isCurrentUser) {
+    ElMessage.warning('不能关注自己')
+    return
+  }
+
   try {
-    const follows = JSON.parse(localStorage.getItem('follows') || '[]')
-
-    if (follower.isFollowing) {
-      // 取消关注
-      const index = follows.findIndex(f =>
-        f.userId === currentUser._id && f.followingId === follower.userId
-      )
-      if (index !== -1) {
-        follows.splice(index, 1)
-      }
-      follower.isFollowing = false
-      ElMessage.success('取消关注')
-    } else {
-      // 添加关注
-      follows.push({
-        userId: currentUser._id,
-        userName: currentUser.nickname,
-        followingId: follower.userId,
-        followingName: follower.name,
-        createdAt: new Date().toISOString()
-      })
-      follower.isFollowing = true
-      ElMessage.success('关注成功')
+    const res = await toggleFollowApi(follower.userId)
+    if (res.code === 0) {
+      follower.isFollowing = res.data.following
+      ElMessage.success(res.data.following ? '关注成功' : '取消关注')
     }
-
-    localStorage.setItem('follows', JSON.stringify(follows))
   } catch (error) {
     console.error('操作失败:', error)
     ElMessage.error('操作失败')

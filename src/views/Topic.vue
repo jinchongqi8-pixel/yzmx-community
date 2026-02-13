@@ -46,15 +46,15 @@
       <div v-else class="post-list">
         <div
           v-for="post in posts"
-          :key="post._id"
+          :key="post.id"
           class="post-card"
-          @click="goToPost(post._id)"
+          @click="goToPost(post.id)"
         >
           <div class="post-header">
-            <img :src="post.userAvatar || '/default-avatar.png'" class="avatar" @click="goToUserProfile(post)" />
+            <img :src="post.author_avatar || '/default-avatar.png'" class="avatar" @click="goToUserProfile(post)" />
             <div class="user-info">
-              <div class="user-name" @click="goToUserProfile(post)">{{ getDisplayName(post, getCurrentUser()) }}</div>
-              <div class="post-time">{{ formatTime(post.createdAt) }}</div>
+              <div class="user-name" @click="goToUserProfile(post)">{{ post.author_name || '用户' }}</div>
+              <div class="post-time">{{ formatTime(post.created_at) }}</div>
             </div>
           </div>
 
@@ -70,9 +70,9 @@
           </div>
 
           <div class="post-stats">
-            <span>👁 {{ post.viewCount || 0 }}</span>
-            <span>❤️ {{ post.likeCount || 0 }}</span>
-            <span>💬 {{ post.commentCount || 0 }}</span>
+            <span>👁 {{ post.view_count || 0 }}</span>
+            <span>❤️ {{ post.like_count || 0 }}</span>
+            <span>💬 {{ post.comment_count || 0 }}</span>
           </div>
         </div>
       </div>
@@ -86,6 +86,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { formatTime } from '../utils/formatTime'
 import { getDisplayName } from '../utils/userName'
+import { getPostList } from '../api/cloud'
 import AnnouncementBanner from '../components/AnnouncementBanner.vue'
 
 const route = useRoute()
@@ -106,7 +107,7 @@ const topicName = computed(() => {
 
 // 总点赞数
 const totalLikes = computed(() => {
-  return posts.value.reduce((sum, post) => sum + (post.likeCount || 0), 0)
+  return posts.value.reduce((sum, post) => sum + (post.like_count || 0), 0)
 })
 
 // 加载帖子
@@ -114,17 +115,19 @@ const loadPosts = async () => {
   loading.value = true
 
   try {
-    // TODO: 调用云函数获取话题相关帖子
-    // 从 localStorage 读取所有帖子，筛选包含话题标签的
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    const tag = topicName.value
+    // 从 Supabase 获取所有帖子
+    const res = await getPostList({ limit: 100 })
+    if (res.code === 0) {
+      const allPosts = res.data.list || []
+      const tag = topicName.value
 
-    // 筛选包含该话题标签的帖子
-    const filteredPosts = allPosts.filter(post => {
-      return post.content && post.content.includes(tag)
-    })
+      // 筛选包含该话题标签的帖子
+      const filteredPosts = allPosts.filter(post => {
+        return post.content && post.content.includes(tag)
+      })
 
-    posts.value = filteredPosts
+      posts.value = filteredPosts
+    }
   } catch (error) {
     console.error('加载失败:', error)
   } finally {
@@ -147,8 +150,8 @@ const goToCreate = () => {
 
 // 跳转到用户主页
 const goToUserProfile = (post) => {
-  if (post.userId) {
-    router.push(`/user/${post.userId}`)
+  if (post.author_id) {
+    router.push(`/user/${post.author_id}`)
   }
 }
 
