@@ -113,8 +113,8 @@ const login = async () => {
 
   try {
     // ========== 开发模式：跳过短信验证 ==========
-    // 生成固定用户ID
-    const devUserId = 'dev_' + phone.value
+    // 生成固定用户ID（用 u_ 前缀避免 . 导致 URL 解析问题）
+    const devUserId = 'u' + phone.value
 
     // 检查用户 profile 是否存在
     const { data: profile } = await supabase

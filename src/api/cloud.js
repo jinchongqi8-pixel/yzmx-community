@@ -49,7 +49,7 @@ export async function phoneLogin(phone, code) {
     }
 
     // ========== 开发模式：生成固定用户ID ==========
-    const userId = 'dev_' + phone
+    const userId = 'u' + phone
 
     // 检查 profile 是否存在
     const { data: profile } = await supabase
