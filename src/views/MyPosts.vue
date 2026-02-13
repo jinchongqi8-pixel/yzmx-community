@@ -43,15 +43,15 @@
       </div>
 
       <div v-else class="post-list">
-        <div v-for="post in posts" :key="post._id" class="post-item">
+        <div v-for="post in posts" :key="post.id" class="post-item">
           <div class="post-header">
             <div class="post-type-tag" :class="getTypeClass(post.type)">
-              {{ getTypeText(post.type) }}
+              {{ post.type || '交流' }}
             </div>
-            <span class="post-time">{{ formatTime(post.createdAt) }}</span>
+            <span class="post-time">{{ formatTime(post.created_at) }}</span>
           </div>
 
-          <div class="post-content" @click="goToDetail(post._id)">
+          <div class="post-content" @click="goToDetail(post.id)">
             {{ post.content }}
           </div>
 
@@ -68,16 +68,15 @@
           </div>
 
           <div class="post-stats">
-            <span>👁 {{ post.viewCount || 0 }}</span>
-            <span>❤️ {{ post.likeCount || 0 }}</span>
-            <span>💬 {{ post.commentCount || 0 }}</span>
+            <span>❤️ {{ post.like_count || 0 }}</span>
+            <span>💬 {{ post.comment_count || 0 }}</span>
           </div>
 
           <div class="post-actions">
-            <el-button size="small" @click="editPost(post._id)">
+            <el-button size="small" @click="editPost(post.id)">
               编辑
             </el-button>
-            <el-button size="small" type="danger" @click="deletePost(post._id)">
+            <el-button size="small" type="danger" @click="deletePost(post.id)">
               删除
             </el-button>
           </div>
@@ -93,36 +92,27 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 import { formatTime } from '../utils/formatTime'
+import { getPostList, deletePost as deletePostApi } from '../api/cloud'
 
 const router = useRouter()
 const posts = ref([])
 const loading = ref(false)
 const sortBy = ref('time')
 
-// 获取当前用户
-const getCurrentUser = () => {
-  const userInfo = localStorage.getItem('userInfo')
-  return userInfo ? JSON.parse(userInfo) : null
-}
+// 获取当前用户ID
+const getCurrentUserId = () => {
+  const devUserId = localStorage.getItem('devUserId')
+  if (devUserId) return devUserId
 
-// 获取帖子类型文字
-const getTypeText = (type) => {
-  const types = {
-    1: '交流',
-    2: '提问',
-    3: '分享'
-  }
-  return types[type] || '交流'
+  const userInfo = localStorage.getItem('userInfo')
+  return userInfo ? JSON.parse(userInfo)._id : null
 }
 
 // 获取帖子类型样式
 const getTypeClass = (type) => {
-  const classes = {
-    1: 'type-discuss',
-    2: 'type-question',
-    3: 'type-share'
-  }
-  return classes[type] || 'type-discuss'
+  if (type === '提问') return 'type-question'
+  if (type === '分享') return 'type-share'
+  return 'type-discuss'
 }
 
 // 加载帖子列表
@@ -130,39 +120,29 @@ const loadPosts = async () => {
   loading.value = true
 
   try {
-    const currentUser = getCurrentUser()
-    if (!currentUser) {
+    const userId = getCurrentUserId()
+    if (!userId) {
       ElMessage.warning('请先登录')
       router.push('/login')
       return
     }
 
-    // 获取所有帖子
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
+    // 从 Supabase 获取当前用户的帖子
+    const res = await getPostList({ userId })
 
-    // 筛选当前用户的帖子 - 使用 userId 匹配
-    let myPosts = allPosts.filter(p => p.userId === currentUser._id)
+    if (res.code === 0) {
+      let myPosts = res.data.list || []
 
-    // 如果找不到，尝试用昵称匹配（兼容旧数据）
-    if (myPosts.length === 0) {
-      myPosts = allPosts.filter(p => p.userName === currentUser.nickname || p.userName === '我')
+      // 排序
+      if (sortBy.value === 'likes') {
+        myPosts.sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
+      } else if (sortBy.value === 'comments') {
+        myPosts.sort((a, b) => (b.comment_count || 0) - (a.comment_count || 0))
+      }
+      // Supabase 默认按 created_at 降序查询，所以不需要额外排序
+
+      posts.value = myPosts
     }
-
-    // 排序
-    if (sortBy.value === 'likes') {
-      myPosts.sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0))
-    } else if (sortBy.value === 'comments') {
-      myPosts.sort((a, b) => (b.commentCount || 0) - (a.commentCount || 0))
-    } else {
-      // 按时间排序（新的在前）
-      myPosts.sort((a, b) => {
-        const timeA = a.timestamp || 0
-        const timeB = b.timestamp || 0
-        return timeB - timeA
-      })
-    }
-
-    posts.value = myPosts
   } catch (error) {
     console.error('加载失败:', error)
     ElMessage.error('加载失败')
@@ -195,24 +175,18 @@ const deletePost = async (postId) => {
       type: 'warning'
     })
 
-    // 从 localStorage 删除帖子
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    const updatedPosts = allPosts.filter(p => p._id !== postId)
-    localStorage.setItem('posts', JSON.stringify(updatedPosts))
-
-    // 更新用户统计数据
-    const currentUser = getCurrentUser()
-    if (currentUser) {
-      currentUser.postsCount = Math.max(0, (currentUser.postsCount || 0) - 1)
-      localStorage.setItem('userInfo', JSON.stringify(currentUser))
-    }
+    // 使用 Supabase API 删除帖子
+    await deletePostApi(postId)
 
     // 从列表中移除
-    posts.value = posts.value.filter(p => p._id !== postId)
+    posts.value = posts.value.filter(p => p.id !== postId)
 
     ElMessage.success('删除成功')
   } catch (error) {
-    // 用户取消
+    if (error !== 'cancel') {
+      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 

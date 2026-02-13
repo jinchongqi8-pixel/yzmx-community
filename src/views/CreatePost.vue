@@ -85,6 +85,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { createPost as createPostApi } from '../api/cloud'
+import { supabase, TABLES } from '../supabase/client'
 
 const router = useRouter()
 
@@ -98,10 +100,13 @@ const previewImageUrl = ref('')
 // 状态
 const submitting = ref(false)
 
-// 获取当前用户
-const getCurrentUser = () => {
+// 获取当前用户ID
+const getCurrentUserId = () => {
+  const devUserId = localStorage.getItem('devUserId')
+  if (devUserId) return devUserId
+
   const userInfo = localStorage.getItem('userInfo')
-  return userInfo ? JSON.parse(userInfo) : null
+  return userInfo ? JSON.parse(userInfo)._id : null
 }
 
 // 图片预览
@@ -173,8 +178,8 @@ const submitPost = async () => {
     return
   }
 
-  const user = getCurrentUser()
-  if (!user) {
+  const userId = getCurrentUserId()
+  if (!userId) {
     ElMessage.warning('请先登录')
     router.push('/login')
     return
@@ -183,48 +188,30 @@ const submitPost = async () => {
   submitting.value = true
 
   try {
+    // 获取用户 profile
+    const { data: profile } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .eq('id', userId)
+      .single()
+
     // 获取图片base64数据
     const images = imageList.value.map(file => file.url || file.response)
 
-    // 创建新帖子
-    const newPost = {
-      _id: Date.now().toString(),
-      userId: user._id,
-      timestamp: Date.now(),
-      userName: user.nickname || '我',
-      userAvatar: user.avatar || '',
+    // 类型映射
+    const typeMap = {
+      1: '交流',
+      2: '提问',
+      3: '分享'
+    }
+
+    // 使用 Supabase API 创建帖子
+    await createPostApi({
       content: postContent.value,
-      type: postType.value,
       images: images,
       tags: extractTags(postContent.value),
-      createdAt: Date.now(),
-      likeCount: 0,
-      viewCount: 0,
-      commentCount: 0,
-      likedBy: [],
-      viewedBy: [], // 记录浏览过的用户ID
-      comments: []
-    }
-
-    // 使用 localStorage 保存帖子
-    const posts = JSON.parse(localStorage.getItem('posts') || '[]')
-    posts.unshift(newPost)
-
-    // 检查localStorage是否已满
-    try {
-      localStorage.setItem('posts', JSON.stringify(posts))
-    } catch (storageError) {
-      if (storageError.name === 'QuotaExceededError') {
-        ElMessage.error('存储空间已满，请减少图片数量或删除旧帖子')
-        submitting.value = false
-        return
-      }
-      throw storageError
-    }
-
-    // 更新用户统计数据
-    user.postsCount = (user.postsCount || 0) + 1
-    localStorage.setItem('userInfo', JSON.stringify(user))
+      type: typeMap[postType.value]
+    })
 
     ElMessage.success('发布成功')
     router.push('/community')
