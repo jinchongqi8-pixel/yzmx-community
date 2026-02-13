@@ -24,13 +24,13 @@
         <!-- 作者信息 -->
         <div class="author-section">
           <img
-            :src="post.userAvatar || '/default-avatar.png'"
+            :src="post.author_avatar || '/default-avatar.png'"
             class="author-avatar"
             @click="goToUserProfile"
           />
           <div class="author-info">
-            <div class="author-name" @click="goToUserProfile">{{ post.userName }}</div>
-            <div class="post-time">{{ formatTime(post.createdAt) }}</div>
+            <div class="author-name" @click="goToUserProfile">{{ post.author_name }}</div>
+            <div class="post-time">{{ formatTime(post.created_at) }}</div>
           </div>
           <el-button @click="toggleCollect" :type="isCollected ? 'primary' : 'default'" plain>
             {{ isCollected ? '⭐ 已收藏' : '☆ 收藏' }}
@@ -455,9 +455,9 @@ const addToHistory = (post, user) => {
     type: 'post',
     postId: post._id,
     title: post.content?.substring(0, 100),
-    userId: post.userId,
-    userName: post.userName,
-    userAvatar: post.userAvatar,
+    userId: post.author_id,
+    userName: post.author_name,
+    userAvatar: post.author_avatar,
     timestamp: Date.now(),
     date: new Date().toLocaleDateString(),
     createdAt: new Date().toLocaleString()
@@ -486,10 +486,31 @@ const loadPostDetail = async () => {
 
   try {
     const postId = route.params.id
+    const userId = getCurrentUserId()
 
-    // ✅ 先从 localStorage 读取最新数据（防止多标签页冲突）
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    const postIndex = allPosts.findIndex(p => p._id === postId)
+    // 从 Supabase 获取帖子详情
+    const res = await getPostDetail(postId)
+
+    if (res.code !== 0 || !res.data) {
+      ElMessage.error('帖子不存在')
+      router.back()
+      return
+    }
+
+    const postData = res.data
+    post.value = postData
+
+    // 更新统计数据（Supabase 字段是 like_count, comment_count）
+    likeCount.value = postData.like_count || 0
+    commentCount.value = postData.comment_count || 0
+
+    // 检查是否已点赞
+    if (userId) {
+      const likeRes = await checkLike(postId)
+      if (likeRes.code === 0) {
+        isLiked.value = likeRes.data.liked
+      }
+    }
 
     if (postIndex === -1) {
       ElMessage.error('帖子不存在')
