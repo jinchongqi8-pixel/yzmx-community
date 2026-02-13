@@ -56,7 +56,7 @@ export async function phoneLogin(phone, code) {
       .from(TABLES.PROFILES)
       .select('*')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     // 如果不存在，创建一个
     if (!profile) {
@@ -108,7 +108,7 @@ export async function getCurrentUser() {
         .from(TABLES.PROFILES)
         .select('*')
         .eq('id', devUserId)
-        .single()
+        .maybeSingle()
       return profile
     }
 
@@ -123,8 +123,8 @@ export async function getCurrentUser() {
     const { data: profile } = await supabase
       .from(TABLES.PROFILES)
       .select('*')
-      .eq('id', userId)
-      .single()
+      .eq('id', user.id)
+      .maybeSingle()
 
     return profile
   } catch (error) {
@@ -211,7 +211,7 @@ export async function createPost(data) {
     .from(TABLES.PROFILES)
     .select('*')
     .eq('id', userId)
-    .single()
+    .maybeSingle()
 
   const postData = {
     author_id: userId,
@@ -380,7 +380,7 @@ export async function toggleLike(postId) {
     .select('*')
     .eq('user_id', userId)
     .eq('post_id', postId)
-    .single()
+    .maybeSingle()
 
   if (existingLike) {
     // 取消点赞
@@ -422,18 +422,18 @@ export async function toggleLike(postId) {
  */
 export async function checkLike(postId) {
   const userId = await getCurrentUserId()
-  if (!userId) return { liked: false }
+  if (!userId) return { code: 0, data: { liked: false } }
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from(TABLES.LIKES)
     .select('*')
     .eq('user_id', userId)
     .eq('post_id', postId)
-    .single()
+    .maybeSingle()
 
   return {
     code: 0,
-    data: { liked: !!data }
+    data: { liked: !error && !!data }
   }
 }
 
@@ -506,7 +506,7 @@ export async function getCourseDetail(courseId) {
       .select('*')
       .eq('user_id', userId)
       .eq('course_id', courseId)
-      .single()
+      .maybeSingle()
 
     purchased = !!purchase
   }
@@ -534,7 +534,7 @@ export async function purchaseCourse(courseId) {
     .select('*')
     .eq('user_id', userId)
     .eq('course_id', courseId)
-    .single()
+    .maybeSingle()
 
   if (existing) {
     return {
@@ -596,7 +596,7 @@ export async function toggleFollow(followingId) {
     .select('*')
     .eq('follower_id', userId)
     .eq('following_id', followingId)
-    .single()
+    .maybeSingle()
 
   if (existing) {
     // 取消关注
