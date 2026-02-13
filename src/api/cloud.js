@@ -217,6 +217,7 @@ export async function createPost(data) {
     author_id: userId,
     author_name: profile?.nickname || '',
     author_avatar: profile?.avatar || '',
+    author_level: profile?.level || 1,
     content: data.content,
     images: data.images || [],
     tags: data.tags || [],
