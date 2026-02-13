@@ -351,32 +351,45 @@ export async function createComment(data) {
     content: data.content
   }
 
+  console.log('[createComment] 插入评论:', commentData)
+
   const { data: newComment, error } = await supabase
     .from(TABLES.COMMENTS)
     .insert(commentData)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    console.error('[createComment] 插入失败:', error)
+    throw error
+  }
+
+  console.log('[createComment] 插入成功:', newComment)
 
   // 更新帖子评论数
   try {
-    await supabase.rpc('increment_comment_count', { post_id: data.postId })
-  } catch (e) {
-    console.warn('RPC 调用失败，尝试直接更新:', e)
-    // 降级处理：直接更新
-    const { data: post } = await supabase
-      .from(TABLES.POSTS)
-      .select('comment_count')
-      .eq('id', data.postId)
-      .maybeSingle()
-
-    if (post) {
-      await supabase
+    const { error: rpcError } = await supabase.rpc('increment_comment_count', { post_id: data.postId })
+    if (rpcError) {
+      console.warn('[createComment] RPC 失败，尝试直接更新:', rpcError)
+      // 降级处理：直接更新
+      const { data: post } = await supabase
         .from(TABLES.POSTS)
-        .update({ comment_count: (post.comment_count || 0) + 1 })
+        .select('comment_count')
         .eq('id', data.postId)
+        .maybeSingle()
+
+      if (post) {
+        await supabase
+          .from(TABLES.POSTS)
+          .update({ comment_count: (post.comment_count || 0) + 1 })
+          .eq('id', data.postId)
+        console.log('[createComment] 直接更新评论数成功')
+      }
+    } else {
+      console.log('[createComment] RPC 更新评论数成功')
     }
+  } catch (e) {
+    console.error('[createComment] 更新评论数异常:', e)
   }
 
   return {
@@ -417,6 +430,8 @@ export async function toggleLike(postId) {
   const userId = await getCurrentUserId()
   if (!userId) throw new Error('请先登录')
 
+  console.log('[toggleLike] 用户ID:', userId, '帖子ID:', postId)
+
   // 检查是否已点赞
   const { data: existingLike } = await supabase
     .from(TABLES.LIKES)
@@ -426,30 +441,45 @@ export async function toggleLike(postId) {
     .maybeSingle()
 
   if (existingLike) {
+    console.log('[toggleLike] 已点赞，执行取消点赞')
+
     // 取消点赞
-    await supabase
+    const { error: deleteError } = await supabase
       .from(TABLES.LIKES)
       .delete()
       .eq('user_id', userId)
       .eq('post_id', postId)
 
+    if (deleteError) {
+      console.error('[toggleLike] 删除点赞记录失败:', deleteError)
+      throw deleteError
+    }
+    console.log('[toggleLike] 删除点赞记录成功')
+
     // 减少点赞数
     try {
-      await supabase.rpc('decrement_like_count', { post_id: postId })
-    } catch (e) {
-      console.warn('RPC 调用失败，尝试直接更新:', e)
-      const { data: post } = await supabase
-        .from(TABLES.POSTS)
-        .select('like_count')
-        .eq('id', postId)
-        .maybeSingle()
-
-      if (post) {
-        await supabase
+      const { error: rpcError } = await supabase.rpc('decrement_like_count', { post_id: postId })
+      if (rpcError) {
+        console.warn('[toggleLike] RPC 失败，尝试直接更新:', rpcError)
+        // 降级处理：直接更新
+        const { data: post } = await supabase
           .from(TABLES.POSTS)
-          .update({ like_count: Math.max(0, (post.like_count || 0) - 1) })
+          .select('like_count')
           .eq('id', postId)
+          .maybeSingle()
+
+        if (post) {
+          await supabase
+            .from(TABLES.POSTS)
+            .update({ like_count: Math.max(0, (post.like_count || 0) - 1) })
+            .eq('id', postId)
+          console.log('[toggleLike] 直接更新点赞数成功:', Math.max(0, (post.like_count || 0) - 1))
+        }
+      } else {
+        console.log('[toggleLike] RPC 减少点赞数成功')
       }
+    } catch (e) {
+      console.error('[toggleLike] 更新点赞数异常:', e)
     }
 
     return {
@@ -457,31 +487,46 @@ export async function toggleLike(postId) {
       data: { liked: false }
     }
   } else {
+    console.log('[toggleLike] 未点赞，执行点赞')
+
     // 点赞
-    await supabase
+    const { error: insertError } = await supabase
       .from(TABLES.LIKES)
       .insert({
         user_id: userId,
         post_id: postId
       })
 
+    if (insertError) {
+      console.error('[toggleLike] 插入点赞记录失败:', insertError)
+      throw insertError
+    }
+    console.log('[toggleLike] 插入点赞记录成功')
+
     // 增加点赞数
     try {
-      await supabase.rpc('increment_like_count', { post_id: postId })
-    } catch (e) {
-      console.warn('RPC 调用失败，尝试直接更新:', e)
-      const { data: post } = await supabase
-        .from(TABLES.POSTS)
-        .select('like_count')
-        .eq('id', postId)
-        .maybeSingle()
-
-      if (post) {
-        await supabase
+      const { error: rpcError } = await supabase.rpc('increment_like_count', { post_id: postId })
+      if (rpcError) {
+        console.warn('[toggleLike] RPC 失败，尝试直接更新:', rpcError)
+        // 降级处理：直接更新
+        const { data: post } = await supabase
           .from(TABLES.POSTS)
-          .update({ like_count: (post.like_count || 0) + 1 })
+          .select('like_count')
           .eq('id', postId)
+          .maybeSingle()
+
+        if (post) {
+          await supabase
+            .from(TABLES.POSTS)
+            .update({ like_count: (post.like_count || 0) + 1 })
+            .eq('id', postId)
+          console.log('[toggleLike] 直接更新点赞数成功:', (post.like_count || 0) + 1)
+        }
+      } else {
+        console.log('[toggleLike] RPC 增加点赞数成功')
       }
+    } catch (e) {
+      console.error('[toggleLike] 更新点赞数异常:', e)
     }
 
     return {
