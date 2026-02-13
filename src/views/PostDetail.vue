@@ -267,15 +267,24 @@ const loadPostDetail = async () => {
 const loadComments = async () => {
   try {
     const postId = route.params.id
+    console.log('[loadComments] 加载评论, postId:', postId)
+
     const res = await getCommentList(postId)
+
+    console.log('[loadComments] API 响应:', res)
 
     if (res.code === 0 && res.data) {
       // Supabase 返回的数据结构：comments 与 profiles 是关联的
-      comments.value = res.data.map(comment => ({
-        ...comment,
-        profiles: comment.profiles || { nickname: '匿名用户', avatar: '' }
-      }))
-      commentCount.value = comments.value.length
+      const mappedComments = res.data.map(comment => {
+        console.log('[loadComments] 处理评论:', comment)
+        return {
+          ...comment,
+          profiles: comment.profiles || { nickname: '匿名用户', avatar: '' }
+        }
+      })
+      comments.value = mappedComments
+      commentCount.value = mappedComments.length
+      console.log('[loadComments] 评论数量:', commentCount.value)
     } else {
       comments.value = []
     }
@@ -294,22 +303,31 @@ const handleLike = async () => {
 
   try {
     const postId = route.params.id
+    console.log('[handleLike] 当前点赞状态:', isLiked.value, '当前点赞数:', likeCount.value)
+
     const res = await toggleLike(postId)
+
+    console.log('[handleLike] API 响应:', res)
 
     if (res.code === 0) {
       const liked = res.data.liked
       isLiked.value = liked
 
-      // 更新点赞数
-      if (liked) {
-        likeCount.value = (post.value.like_count || 0) + 1
-        post.value.like_count = likeCount.value
-        ElMessage.success('已点赞')
-      } else {
-        likeCount.value = Math.max(0, (post.value.like_count || 1) - 1)
-        post.value.like_count = likeCount.value
-        ElMessage.success('已取消点赞')
+      // 使用新对象触发响应式更新
+      const newLikeCount = liked
+        ? (likeCount.value || 0) + 1
+        : Math.max(0, (likeCount.value || 1) - 1)
+
+      likeCount.value = newLikeCount
+
+      // 更新 post 对象（使用新对象引用）
+      post.value = {
+        ...post.value,
+        like_count: newLikeCount
       }
+
+      console.log('[handleLike] 更新后 - 点赞状态:', isLiked.value, '点赞数:', newLikeCount)
+      ElMessage.success(liked ? '已点赞' : '已取消点赞')
     }
   } catch (error) {
     console.error('点赞失败:', error)
@@ -361,18 +379,24 @@ const submitComment = async () => {
 
   try {
     const postId = route.params.id
+    console.log('[submitComment] 准备发表评论, postId:', postId, 'content:', commentContent.value)
+
     const res = await createComment({
       postId: postId,
       content: commentContent.value
     })
 
+    console.log('[submitComment] API 响应:', res)
+
     if (res.code === 0 && res.data) {
       // 获取用户信息
       const userInfo = getCurrentUser()
 
-      // 添加新评论到列表
+      // 添加新评论到列表（确保响应式更新）
       const newComment = {
-        ...res.data,
+        id: res.data.id,
+        content: res.data.content,
+        created_at: res.data.created_at,
         profiles: {
           nickname: userInfo?.nickname || '我',
           avatar: userInfo?.avatar || '',
@@ -380,16 +404,25 @@ const submitComment = async () => {
         }
       }
 
-      comments.value.unshift(newComment)
-      commentCount.value++
-      post.value.comment_count = commentCount.value
+      console.log('[submitComment] 新评论对象:', newComment)
+
+      // 使用新数组触发响应式更新
+      comments.value = [newComment, ...comments.value]
+      const newCount = (commentCount.value || 0) + 1
+      commentCount.value = newCount
+
+      // 更新 post 对象（使用新对象引用）
+      post.value = {
+        ...post.value,
+        comment_count: newCount
+      }
 
       commentContent.value = ''
       ElMessage.success('评论成功')
     }
   } catch (error) {
     console.error('评论失败:', error)
-    ElMessage.error('评论失败，请重试')
+    ElMessage.error('评论失败：' + error.message)
   }
 }
 
