@@ -39,7 +39,7 @@
 
         <!-- 帖子类型标签 -->
         <el-tag
-          v-if="post.type === 2"
+          v-if="post.type === '提问'"
           type="warning"
           effect="plain"
           class="post-type-tag"
@@ -47,7 +47,7 @@
           提问
         </el-tag>
         <el-tag
-          v-if="post.type === 3"
+          v-if="post.type === '分享'"
           type="success"
           effect="plain"
           class="post-type-tag"
@@ -138,274 +138,48 @@
         </div>
 
         <div v-else class="comments-list">
-          <!-- 一级评论 -->
           <div
             v-for="comment in comments"
-            :key="comment._id"
+            :key="comment.id"
             class="comment-item"
           >
             <img
-              :src="comment.userAvatar || '/default-avatar.png'"
+              :src="comment.profiles?.avatar || '/default-avatar.png'"
               class="comment-avatar clickable"
-              @click="goToCommentUserProfile(comment)"
+              @click="goToUserProfile(comment.profiles?.id)"
             />
             <div class="comment-content-wrapper">
               <div class="comment-header">
-                <span class="comment-user clickable" @click="goToCommentUserProfile(comment)">{{ comment.userName }}</span>
-                <span class="comment-time">{{ formatTime(comment.createdAt) }}</span>
-              </div>
-              <div class="comment-text">{{ comment.commentContent }}</div>
-              <div class="comment-actions">
-                <span @click="likeComment(comment)" class="action-btn like-btn" :class="{ active: isCommentLiked(comment) }">
-                  <span class="heart-icon">{{ isCommentLiked(comment) ? '❤️' : '🤍' }}</span>
-                  {{ comment.likeCount || 0 }}
+                <span class="comment-user clickable" @click="goToUserProfile(comment.profiles?.id)">
+                  {{ comment.profiles?.nickname || '匿名用户' }}
                 </span>
-                <span @click="showReplyInput(comment)" class="action-btn">
-                  <el-icon><ChatDotRound /></el-icon>
-                  回复
-                </span>
-                <span
-                  v-if="comment.replies && comment.replies.length > 0"
-                  @click="toggleReplies(comment)"
-                  class="action-btn"
-                >
-                  <el-icon><ArrowDown /></el-icon>
-                  {{ isRepliesExpanded(comment) ? '收起' : `展开 ${comment.replies.length} 条回复` }}
-                </span>
-                <span @click="toggleEmojiPicker(comment)" class="action-btn emoji-btn">
-                  😊 表情
-                </span>
+                <span class="comment-time">{{ formatTime(comment.created_at) }}</span>
               </div>
-
-              <!-- 表情反应 -->
-              <div v-if="showEmojiPickerId === comment._id" class="emoji-picker">
-                <span
-                  v-for="emoji in emojiList"
-                  :key="emoji"
-                  @click="reactToComment(comment, emoji)"
-                  class="emoji-item"
-                  :class="{ active: hasReacted(comment, emoji) }"
-                >
-                  {{ emoji }}
-                  <span v-if="getReactionCount(comment, emoji) > 0" class="emoji-count">
-                    {{ getReactionCount(comment, emoji) }}
-                  </span>
-                </span>
-              </div>
-
-              <!-- 显示已添加的表情反应 -->
-              <div v-if="comment.reactions && Object.keys(comment.reactions).length > 0" class="reactions-display">
-                <div
-                  v-for="(users, emoji) in comment.reactions"
-                  :key="emoji"
-                  class="reaction-badge-wrapper"
-                >
-                  <span
-                    class="reaction-badge"
-                    @click="toggleReactionUsers(comment, emoji)"
-                  >
-                    {{ emoji }} {{ users.length }}
-                  </span>
-                  <!-- 反应用户列表 -->
-                  <div v-if="showReactionUsers(comment._id, emoji)" class="reaction-users-list">
-                    <div
-                      v-for="userId in users"
-                      :key="userId"
-                      class="reaction-user-item"
-                    >
-                      <img :src="getUserAvatar(userId)" class="reaction-user-avatar" />
-                      <span class="reaction-user-name">{{ getUserName(userId) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 二级评论（回复） -->
-              <div v-if="isRepliesExpanded(comment) && comment.replies && comment.replies.length > 0" class="replies-section">
-                <div
-                  v-for="reply in comment.replies"
-                  :key="reply._id"
-                  class="reply-item"
-                >
-                  <img
-                    :src="reply.userAvatar || '/default-avatar.png'"
-                    class="reply-avatar clickable"
-                    @click="goToReplyUserProfile(reply)"
-                  />
-                  <div class="reply-content-wrapper">
-                    <div class="reply-header">
-                      <span class="reply-user clickable" @click="goToReplyUserProfile(reply)">{{ reply.userName }}</span>
-                      <span v-if="reply.replyToUserName" class="reply-to">
-                        回复 @{{ reply.replyToUserName }}
-                      </span>
-                      <span class="reply-time">{{ formatTime(reply.createdAt) }}</span>
-                    </div>
-                    <div class="reply-text">{{ reply.commentContent }}</div>
-                    <div class="reply-actions">
-                      <span @click="likeReply(comment, reply)" class="action-btn like-btn" :class="{ active: isReplyLiked(reply) }">
-                        <span class="heart-icon">{{ isReplyLiked(reply) ? '❤️' : '🤍' }}</span>
-                        {{ reply.likeCount || 0 }}
-                      </span>
-                      <span @click="showReplyInput(comment, reply)" class="action-btn">
-                        <el-icon><ChatDotRound /></el-icon>
-                        回复
-                      </span>
-                      <span @click="toggleReplyEmojiPicker(comment, reply)" class="action-btn emoji-btn">
-                        😊
-                      </span>
-                    </div>
-
-                    <!-- 回复的表情反应 -->
-                    <div v-if="showReplyEmojiPickerId === reply._id" class="emoji-picker">
-                      <span
-                        v-for="emoji in emojiList"
-                        :key="emoji"
-                        @click="reactToReply(comment, reply, emoji)"
-                        class="emoji-item"
-                        :class="{ active: hasReactedToReply(reply, emoji) }"
-                      >
-                        {{ emoji }}
-                        <span v-if="getReplyReactionCount(reply, emoji) > 0" class="emoji-count">
-                          {{ getReplyReactionCount(reply, emoji) }}
-                        </span>
-                      </span>
-                    </div>
-
-                    <!-- 显示回复的表情反应 -->
-                    <div v-if="reply.reactions && Object.keys(reply.reactions).length > 0" class="reactions-display">
-                      <div
-                        v-for="(users, emoji) in reply.reactions"
-                        :key="emoji"
-                        class="reaction-badge-wrapper"
-                      >
-                        <span
-                          class="reaction-badge"
-                          @click="toggleReplyReactionUsers(reply, emoji)"
-                        >
-                          {{ emoji }} {{ users.length }}
-                        </span>
-                        <!-- 反应用户列表 -->
-                        <div v-if="showReplyReactionUsers(reply._id, emoji)" class="reaction-users-list">
-                          <div
-                            v-for="userId in users"
-                            :key="userId"
-                            class="reaction-user-item"
-                          >
-                            <img :src="getUserAvatar(userId)" class="reaction-user-avatar" />
-                            <span class="reaction-user-name">{{ getUserName(userId) }}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 回复输入框 -->
-              <div v-if="replyToCommentId === comment._id" class="reply-input-area">
-                <el-input
-                  v-model="replyContent"
-                  :placeholder="replyToReplyId ? `回复 ${getReplyUserName(comment, replyToReplyId)}` : `回复 ${comment.userName}`"
-                  :rows="2"
-                  size="small"
-                  class="reply-input"
-                />
-                <div class="reply-actions">
-                  <el-button
-                    size="small"
-                    type="primary"
-                    @click="submitReply(comment)"
-                    :disabled="!replyContent.trim()"
-                  >
-                    发送
-                  </el-button>
-                  <el-button
-                    size="small"
-                    @click="cancelReply"
-                  >
-                    取消
-                  </el-button>
-                </div>
-              </div>
+              <div class="comment-text">{{ comment.content }}</div>
             </div>
           </div>
         </div>
       </div>
     </main>
-
-    <!-- 侧边栏 -->
-    <aside class="sidebar">
-      <!-- 热门话题 -->
-      <div class="sidebar-card">
-        <h4 class="sidebar-title">🔥 热门话题</h4>
-        <div class="hot-tags">
-          <el-tag
-            v-for="tag in hotTags"
-            :key="tag"
-            class="hot-tag"
-            @click="goToTag(tag)"
-          >
-            {{ tag }}
-          </el-tag>
-        </div>
-      </div>
-
-      <!-- 相关推荐 -->
-      <div class="sidebar-card">
-        <h4 class="sidebar-title">📚 相关帖子</h4>
-        <div class="related-posts">
-          <div
-            v-for="item in relatedPosts"
-            :key="item._id"
-            class="related-post-item"
-            @click="goToPost(item._id)"
-          >
-            <div class="related-post-title">{{ item.title || item.content }}</div>
-            <div class="related-post-meta">
-              <span>👁 {{ item.viewCount || 0 }}</span>
-              <span>💬 {{ item.commentCount || 0 }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </aside>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ArrowLeft,
   View,
-  ChatDotRound,
-  Select,
-  ArrowDown
+  ChatDotRound
 } from '@element-plus/icons-vue'
-import {
-  createLikeNotification,
-  createCommentNotification,
-  createCollectNotification,
-  createReplyNotification,
-  createMentionNotification,
-  createCommentLikeNotification,
-  createCommentReactionNotification,
-  extractMentions
-} from '../utils/notification'
 import { formatTime } from '../utils/formatTime'
 import {
   getPostDetail,
   toggleLike,
-  checkLike,
   getCommentList,
-  createComment,
-  deleteComment,
-  toggleFollow,
-  getFollowingList,
-  getUserProfile
+  createComment
 } from '../api/cloud'
-import { supabase, TABLES } from '../supabase/client'
 
 const route = useRoute()
 const router = useRouter()
@@ -413,14 +187,6 @@ const router = useRouter()
 // 数据
 const post = ref(null)
 const comments = ref([])
-const relatedPosts = ref([])
-const hotTags = ref([
-  '#前端开发',
-  '#JavaScript',
-  '#Vue3',
-  '#微信小程序',
-  '#Node.js'
-])
 
 // 状态
 const loading = ref(false)
@@ -430,11 +196,6 @@ const likeCount = ref(0)
 const viewCount = ref(0)
 const commentCount = ref(0)
 const commentContent = ref('')
-const replyContent = ref('')
-const replyToCommentId = ref(null)
-const replyToReplyId = ref(null) // 新增：追踪回复的是哪个回复
-const expandedReplies = ref(new Set()) // 存储展开的评论ID
-const showReactionUsersMap = ref({}) // 存储显示表情用户的映射 {commentId_emoji: boolean}
 
 // 获取当前用户ID
 const getCurrentUserId = () => {
@@ -445,56 +206,6 @@ const getCurrentUserId = () => {
 const getCurrentUser = () => {
   const userInfo = localStorage.getItem('userInfo')
   return userInfo ? JSON.parse(userInfo) : null
-}
-
-// 检查评论是否已点赞
-const isCommentLiked = (comment) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id || !comment.likedBy) return false
-  return comment.likedBy.includes(userInfo._id)
-}
-
-// 检查回复是否已点赞
-const isReplyLiked = (reply) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id || !reply.likedBy) return false
-  return reply.likedBy.includes(userInfo._id)
-}
-
-// 添加到浏览历史
-const addToHistory = (post, user) => {
-  const key = `history_${user._id}`
-  const history = JSON.parse(localStorage.getItem(key) || '[]')
-
-  // 创建历史记录
-  const historyItem = {
-    _id: `hist_${Date.now()}`,
-    type: 'post',
-    postId: post._id,
-    title: post.content?.substring(0, 100),
-    userId: post.author_id,
-    userName: post.author_name,
-    userAvatar: post.author_avatar,
-    timestamp: Date.now(),
-    date: new Date().toLocaleDateString(),
-    createdAt: new Date().toLocaleString()
-  }
-
-  // 移除重复的历史记录（同一帖子只保留最新的）
-  const existingIndex = history.findIndex(h => h.postId === post._id)
-  if (existingIndex !== -1) {
-    history.splice(existingIndex, 1)
-  }
-
-  // 添加到前面
-  history.unshift(historyItem)
-
-  // 只保留最近100条历史
-  if (history.length > 100) {
-    history.splice(100)
-  }
-
-  localStorage.setItem(key, JSON.stringify(history))
 }
 
 // 加载帖子详情
@@ -517,15 +228,20 @@ const loadPostDetail = async () => {
     const postData = res.data
     post.value = postData
 
-    // 更新统计数据（Supabase 字段是 like_count, comment_count）
+    // 更新统计数据
     likeCount.value = postData.like_count || 0
+    viewCount.value = postData.view_count || 0
     commentCount.value = postData.comment_count || 0
 
     // 检查是否已点赞
     if (userId) {
-      const likeRes = await checkLike(postId)
-      if (likeRes.code === 0) {
-        isLiked.value = likeRes.data.liked
+      const { data: likeData } = await toggleLike(postId)
+      if (likeData?.data?.liked !== undefined) {
+        // 如果当前是未点赞状态，取消点赞以恢复原状
+        if (likeData.data.liked) {
+          await toggleLike(postId)
+        }
+        isLiked.value = false
       }
     }
 
@@ -554,18 +270,10 @@ const loadComments = async () => {
     const res = await getCommentList(postId)
 
     if (res.code === 0 && res.data) {
-      // 转换 Supabase 数据格式到组件使用的格式
+      // Supabase 返回的数据结构：comments 与 profiles 是关联的
       comments.value = res.data.map(comment => ({
-        _id: comment.id,
-        id: comment.id,
-        userName: comment.profiles?.nickname || '匿名用户',
-        userAvatar: comment.profiles?.avatar || '',
-        commentContent: comment.content,
-        userId: comment.author_id,
-        createdAt: comment.created_at,
-        likeCount: comment.like_count || 0,
-        likedBy: comment.liked_by || [],
-        replies: []
+        ...comment,
+        profiles: comment.profiles || { nickname: '匿名用户', avatar: '' }
       }))
       commentCount.value = comments.value.length
     } else {
@@ -611,8 +319,8 @@ const handleLike = async () => {
 
 // 收藏/取消收藏
 const toggleCollect = () => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id) {
+  const userId = getCurrentUserId()
+  if (!userId) {
     ElMessage.warning('请先登录')
     return
   }
@@ -625,12 +333,10 @@ const toggleCollect = () => {
   const postId = route.params.id
 
   if (isCollected.value) {
-    // 添加收藏
     if (!collections.includes(postId)) {
       collections.push(postId)
     }
   } else {
-    // 取消收藏
     const index = collections.indexOf(postId)
     if (index !== -1) {
       collections.splice(index, 1)
@@ -638,15 +344,6 @@ const toggleCollect = () => {
   }
 
   localStorage.setItem('collections', JSON.stringify(collections))
-
-  // 创建收藏通知（如果收藏的不是作者自己）
-  if (post.value.userId !== userInfo._id) {
-    createCollectNotification(userInfo, post.value, post.value.userId)
-    // 更新未读通知数
-    if (window.updateNotificationBadge) {
-      window.updateNotificationBadge()
-    }
-  }
 }
 
 // 发表评论
@@ -675,15 +372,12 @@ const submitComment = async () => {
 
       // 添加新评论到列表
       const newComment = {
-        _id: res.data.id,
-        id: res.data.id,
-        userName: userInfo?.nickname || '我',
-        userAvatar: userInfo?.avatar || '',
-        commentContent: commentContent.value,
-        userId: userId,
-        createdAt: res.data.created_at || Date.now(),
-        likeCount: 0,
-        replies: []
+        ...res.data,
+        profiles: {
+          nickname: userInfo?.nickname || '我',
+          avatar: userInfo?.avatar || '',
+          id: userId
+        }
       }
 
       comments.value.unshift(newComment)
@@ -699,473 +393,29 @@ const submitComment = async () => {
   }
 }
 
-// 显示回复输入框
-const showReplyInput = (comment, reply = null) => {
-  replyToCommentId.value = comment._id
-  replyToReplyId.value = reply ? reply._id : null
-  replyContent.value = ''
-}
-
-// 取消回复
-const cancelReply = () => {
-  replyToCommentId.value = null
-  replyToReplyId.value = null
-  replyContent.value = ''
-}
-
-// 提交回复
-const submitReply = async (comment) => {
-  if (!replyContent.value.trim()) {
-    ElMessage.warning('请输入回复内容')
-    return
-  }
-
-  const user = getCurrentUser()
-  if (!user) {
-    ElMessage.warning('请先登录')
-    return
-  }
-
-  try {
-    const postId = route.params.id
-
-    // 获取被回复的用户名
-    let replyToUserName = comment.userName // 默认回复主评论
-    if (replyToReplyId.value) {
-      // 如果是回复某个回复，找到那个回复的用户名
-      const reply = comment.replies.find(r => r._id === replyToReplyId.value)
-      if (reply) {
-        replyToUserName = reply.userName
-      }
-    }
-
-    // 创建新回复（所有回复都是二级，平铺在主评论下）
-    const newReply = {
-      _id: `reply_${Date.now()}`,
-      userName: user.nickname || '我',
-      userAvatar: user.avatar || '',
-      replyToUserName: replyToUserName,
-      commentContent: replyContent.value,
-      userId: user._id,
-      createdAt: Date.now(),
-      likeCount: 0
-    }
-
-    if (!comment.replies) {
-      comment.replies = []
-    }
-    comment.replies.push(newReply)
-
-    // 保存到localStorage
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    const postIndex = allPosts.findIndex(p => p._id === postId)
-    if (postIndex !== -1) {
-      // 找到对应的评论索引
-      const commentIndex = allPosts[postIndex].comments.findIndex(c => c._id === comment._id)
-      if (commentIndex !== -1) {
-        // 更新回复列表
-        allPosts[postIndex].comments[commentIndex].replies = comment.replies
-        localStorage.setItem('posts', JSON.stringify(allPosts))
-      }
-    }
-
-    // 更新 post.value
-    if (post.value.comments) {
-      const commentIndex2 = post.value.comments.findIndex(c => c._id === comment._id)
-      if (commentIndex2 !== -1) {
-        post.value.comments[commentIndex2].replies = comment.replies
-      }
-    }
-
-    replyToCommentId.value = null
-    replyToReplyId.value = null
-    replyContent.value = ''
-
-    ElMessage.success('回复成功')
-
-    // 创建回复通知
-    // 如果是回复某个回复，找到原回复的作者；否则是回复主评论
-    let targetUser = null
-    if (replyToUserName) {
-      // 找到被回复的回复
-      const repliedReply = comment.replies.find(r => r.userName === replyToUserName)
-      if (repliedReply) {
-        targetUser = repliedReply
-      }
-    } else {
-      // 回复主评论
-      targetUser = comment
-    }
-
-    if (targetUser && targetUser.userId !== user._id) {
-      createReplyNotification(user, post.value, targetUser, replyContent.value)
-      // 更新未读通知数
-      if (window.updateNotificationBadge) {
-        window.updateNotificationBadge()
-      }
-    }
-  } catch (error) {
-    console.error('回复失败:', error)
-    ElMessage.error('回复失败')
-  }
-}
-
-// 点赞/取消点赞评论
-const likeComment = (comment) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id) {
-    ElMessage.warning('请先登录')
-    return
-  }
-
-  // 初始化 likedBy 数组
-  if (!comment.likedBy) {
-    comment.likedBy = []
-  }
-
-  const userId = userInfo._id
-  const likedIndex = comment.likedBy.indexOf(userId)
-
-  if (likedIndex === -1) {
-    // 未点赞，添加点赞
-    comment.likedBy.push(userId)
-    comment.likeCount = (comment.likeCount || 0) + 1
-    ElMessage.success('已点赞')
-
-    // 创建评论点赞通知（如果点赞的不是评论作者自己）
-    if (comment.userId && comment.userId !== userId) {
-      createCommentLikeNotification(userInfo, post.value, comment, comment.commentContent)
-      // 更新未读通知数
-      if (window.updateNotificationBadge) {
-        window.updateNotificationBadge()
-      }
-    }
-  } else {
-    // 已点赞，取消点赞
-    comment.likedBy.splice(likedIndex, 1)
-    comment.likeCount = Math.max(0, comment.likeCount - 1)
-    ElMessage.success('已取消点赞')
-  }
-
-  // 保存到localStorage
-  const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-  const postIndex = allPosts.findIndex(p => p._id === route.params.id)
-  if (postIndex !== -1) {
-    allPosts[postIndex].comments = comments.value
-    localStorage.setItem('posts', JSON.stringify(allPosts))
-  }
-}
-
-// 点赞/取消点赞回复
-const likeReply = (comment, reply) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id) {
-    ElMessage.warning('请先登录')
-    return
-  }
-
-  // 初始化 likedBy 数组
-  if (!reply.likedBy) {
-    reply.likedBy = []
-  }
-
-  const userId = userInfo._id
-  const likedIndex = reply.likedBy.indexOf(userId)
-
-  if (likedIndex === -1) {
-    // 未点赞，添加点赞
-    reply.likedBy.push(userId)
-    reply.likeCount = (reply.likeCount || 0) + 1
-    ElMessage.success('已点赞')
-  } else {
-    // 已点赞，取消点赞
-    reply.likedBy.splice(likedIndex, 1)
-    reply.likeCount = Math.max(0, reply.likeCount - 1)
-    ElMessage.success('已取消点赞')
-  }
-
-  // 保存到localStorage
-  const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-  const postIndex = allPosts.findIndex(p => p._id === route.params.id)
-  if (postIndex !== -1) {
-    allPosts[postIndex].comments = comments.value
-    localStorage.setItem('posts', JSON.stringify(allPosts))
-  }
-}
-
-// 表情列表
-const emojiList = ['👍', '❤️', '😂', '🔥', '👏', '🎉', '😮', '😢']
-
-// 表情选择器显示状态
-const showEmojiPickerId = ref(null)
-const showReplyEmojiPickerId = ref(null)
-
-// 切换评论表情选择器
-const toggleEmojiPicker = (comment) => {
-  if (showEmojiPickerId.value === comment._id) {
-    showEmojiPickerId.value = null
-  } else {
-    showEmojiPickerId.value = comment._id
-    showReplyEmojiPickerId.value = null
-  }
-}
-
-// 切换回复表情选择器
-const toggleReplyEmojiPicker = (comment, reply) => {
-  if (showReplyEmojiPickerId.value === reply._id) {
-    showReplyEmojiPickerId.value = null
-  } else {
-    showReplyEmojiPickerId.value = reply._id
-    showEmojiPickerId.value = null
-  }
-}
-
-// 对评论进行表情反应
-const reactToComment = (comment, emoji) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id) {
-    ElMessage.warning('请先登录')
-    return
-  }
-
-  // 初始化 reactions 对象
-  if (!comment.reactions) {
-    comment.reactions = {}
-  }
-
-  // 初始化该表情的用户列表
-  if (!comment.reactions[emoji]) {
-    comment.reactions[emoji] = []
-  }
-
-  const userId = userInfo._id
-  const reactionIndex = comment.reactions[emoji].indexOf(userId)
-
-  if (reactionIndex === -1) {
-    // 未反应，添加反应
-    comment.reactions[emoji].push(userId)
-    ElMessage.success(`已添加 ${emoji} 反应`)
-
-    // 创建评论表情反应通知（如果反应的不是评论作者自己）
-    if (comment.userId && comment.userId !== userId) {
-      createCommentReactionNotification(userInfo, post.value, comment, comment.commentContent, emoji)
-      // 更新未读通知数
-      if (window.updateNotificationBadge) {
-        window.updateNotificationBadge()
-      }
-    }
-  } else {
-    // 已反应，取消反应
-    comment.reactions[emoji].splice(reactionIndex, 1)
-    // 如果该表情没有用户了，删除该表情
-    if (comment.reactions[emoji].length === 0) {
-      delete comment.reactions[emoji]
-    }
-    ElMessage.success(`已取消 ${emoji} 反应`)
-  }
-
-  // 保存到localStorage
-  const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-  const postIndex = allPosts.findIndex(p => p._id === route.params.id)
-  if (postIndex !== -1) {
-    allPosts[postIndex].comments = comments.value
-    localStorage.setItem('posts', JSON.stringify(allPosts))
-  }
-}
-
-// 对回复进行表情反应
-const reactToReply = (comment, reply, emoji) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id) {
-    ElMessage.warning('请先登录')
-    return
-  }
-
-  // 初始化 reactions 对象
-  if (!reply.reactions) {
-    reply.reactions = {}
-  }
-
-  // 初始化该表情的用户列表
-  if (!reply.reactions[emoji]) {
-    reply.reactions[emoji] = []
-  }
-
-  const userId = userInfo._id
-  const reactionIndex = reply.reactions[emoji].indexOf(userId)
-
-  if (reactionIndex === -1) {
-    // 未反应，添加反应
-    reply.reactions[emoji].push(userId)
-    ElMessage.success(`已添加 ${emoji} 反应`)
-  } else {
-    // 已反应，取消反应
-    reply.reactions[emoji].splice(reactionIndex, 1)
-    // 如果该表情没有用户了，删除该表情
-    if (reply.reactions[emoji].length === 0) {
-      delete reply.reactions[emoji]
-    }
-    ElMessage.success(`已取消 ${emoji} 反应`)
-  }
-
-  // 保存到localStorage
-  const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-  const postIndex = allPosts.findIndex(p => p._id === route.params.id)
-  if (postIndex !== -1) {
-    allPosts[postIndex].comments = comments.value
-    localStorage.setItem('posts', JSON.stringify(allPosts))
-  }
-}
-
-// 检查是否对该评论进行了表情反应
-const hasReacted = (comment, emoji) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id || !comment.reactions || !comment.reactions[emoji]) {
-    return false
-  }
-  return comment.reactions[emoji].includes(userInfo._id)
-}
-
-// 检查是否对该回复进行了表情反应
-const hasReactedToReply = (reply, emoji) => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id || !reply.reactions || !reply.reactions[emoji]) {
-    return false
-  }
-  return reply.reactions[emoji].includes(userInfo._id)
-}
-
-// 获取评论的表情反应数量
-const getReactionCount = (comment, emoji) => {
-  if (!comment.reactions || !comment.reactions[emoji]) {
-    return 0
-  }
-  return comment.reactions[emoji].length
-}
-
-// 获取回复的表情反应数量
-const getReplyReactionCount = (reply, emoji) => {
-  if (!reply.reactions || !reply.reactions[emoji]) {
-    return 0
-  }
-  return reply.reactions[emoji].length
-}
-
-// 切换评论表情用户列表显示
-const toggleReactionUsers = (comment, emoji) => {
-  const key = `${comment._id}_${emoji}`
-  if (showReactionUsersMap.value[key]) {
-    delete showReactionUsersMap.value[key]
-  } else {
-    showReactionUsersMap.value[key] = true
-  }
-}
-
-// 切换回复表情用户列表显示
-const toggleReplyReactionUsers = (reply, emoji) => {
-  const key = `${reply._id}_${emoji}`
-  if (showReactionUsersMap.value[key]) {
-    delete showReactionUsersMap.value[key]
-  } else {
-    showReactionUsersMap.value[key] = true
-  }
-}
-
-// 检查是否显示评论的表情用户列表
-const showReactionUsers = (commentId, emoji) => {
-  const key = `${commentId}_${emoji}`
-  return showReactionUsersMap.value[key] || false
-}
-
-// 检查是否显示回复的表情用户列表
-const showReplyReactionUsers = (replyId, emoji) => {
-  const key = `${replyId}_${emoji}`
-  return showReactionUsersMap.value[key] || false
-}
-
-// 获取用户头像
-const getUserAvatar = (userId) => {
-  const users = JSON.parse(localStorage.getItem('users') || '[]')
-  const user = users.find(u => u._id === userId)
-  return user?.avatar || '/default-avatar.png'
-}
-
-// 获取用户名
-const getUserName = (userId) => {
-  const users = JSON.parse(localStorage.getItem('users') || '[]')
-  const user = users.find(u => u._id === userId)
-  return user?.nickname || '未知用户'
-}
-
-// 切换回复显示
-const toggleReplies = (comment) => {
-  if (expandedReplies.value.has(comment._id)) {
-    expandedReplies.value.delete(comment._id)
-  } else {
-    expandedReplies.value.add(comment._id)
-  }
-}
-
-// 检查回复是否展开
-const isRepliesExpanded = (comment) => {
-  return expandedReplies.value.has(comment._id)
-}
-
-// 获取被回复的回复的用户名
-const getReplyUserName = (comment, replyId) => {
-  if (!comment.replies) return ''
-  const reply = comment.replies.find(r => r._id === replyId)
-  return reply ? reply.userName : ''
-}
-
-// 跳转到标签页
-const goToTag = (tag) => {
-  router.push({ path: '/topic', query: { tag } })
-}
-
-// 跳转到帖子
-const goToPost = (postId) => {
-  router.push(`/post/${postId}`)
-}
-
 // 跳转到用户主页
-const goToUserProfile = () => {
-  if (post.value && post.value.userId) {
-    router.push(`/user/${post.value.userId}`)
+const goToUserProfile = (userId) => {
+  if (userId) {
+    router.push(`/user/${userId}`)
   }
 }
 
-// 跳转到评论作者的主页
-const goToCommentUserProfile = (comment) => {
-  if (comment.userId) {
-    router.push(`/user/${comment.userId}`)
-  }
+// 跳转到标签搜索
+const goToTag = (tag) => {
+  router.push(`/community?tag=${tag}`)
 }
 
-// 跳转到回复作者的主页
-const goToReplyUserProfile = (reply) => {
-  if (reply.userId) {
-    router.push(`/user/${reply.userId}`)
-  }
-}
-
-// 解析帖子内容，将话题标签转换为可点击链接
+// 解析帖子内容（支持 @用户、链接等）
 const parseContent = (content) => {
   if (!content) return ''
 
-  // 匹配 #话题名 格式，并替换为可点击的链接
-  return content.replace(
-    /#([^\s#]+)/g,
-    '<span class="topic-tag" onclick="event.stopPropagation(); window.navigateToTopic(\'#$1\')">#$1</span>'
-  )
-}
+  // 简单处理 @用户
+  content = content.replace(/@(\S+)/g, '<span style="color: #0ea5e9;">@$1</span>')
 
-// 全局函数：跳转到话题页面
-window.navigateToTopic = (topicName) => {
-  router.push({
-    path: '/topic',
-    query: { tag: topicName }
-  })
+  // 处理换行
+  content = content.replace(/\n/g, '<br>')
+
+  return content
 }
 
 onMounted(() => {
@@ -1176,58 +426,23 @@ onMounted(() => {
 <style scoped>
 .post-detail-container {
   min-height: 100vh;
-  background: linear-gradient(to bottom, #f0f4f8 0%, #ffffff 100%);
-  position: relative;
-}
-
-/* 背景装饰 */
-.post-detail-container::before {
-  content: '';
-  position: fixed;
-  top: -30%;
-  right: -5%;
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, transparent 70%);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.post-detail-container::after {
-  content: '';
-  position: fixed;
-  bottom: -20%;
-  left: -5%;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(236, 72, 153, 0.08) 0%, transparent 70%);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 0;
+  background: #f5f5f5;
+  padding-bottom: 40px;
 }
 
 .navbar {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
   z-index: 100;
-  transition: all 0.3s ease;
-}
-
-.navbar:hover {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .nav-content {
-  max-width: 1400px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 0 20px;
-  height: 56px;
+  height: 60px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1235,103 +450,58 @@ onMounted(() => {
 
 .logo {
   font-size: 24px;
-  font-weight: 800;
-  background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #f43f5e 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  letter-spacing: -0.5px;
+  font-weight: 600;
+  color: #0ea5e9;
 }
 
 .nav-links {
   display: flex;
-  gap: 32px;
+  gap: 30px;
 }
 
 .nav-link {
-  color: #64748b;
+  color: #666;
   text-decoration: none;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.nav-link::after {
-  content: '';
-  position: absolute;
-  bottom: -18px;
-  left: 50%;
-  width: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #8b5cf6, #ec4899);
-  transform: translateX(-50%);
-  transition: width 0.3s ease;
-}
-
-.nav-link:hover::after,
-.nav-link.router-link-active::after {
-  width: 100%;
+  font-size: 16px;
+  transition: color 0.3s;
 }
 
 .nav-link:hover,
 .nav-link.router-link-active {
-  color: #8b5cf6;
+  color: #0ea5e9;
 }
 
 .main-content {
-  max-width: 1400px;
+  max-width: 800px;
   margin: 20px auto;
   padding: 0 20px;
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 20px;
-  position: relative;
-  z-index: 1;
 }
 
 .back-btn {
   margin-bottom: 20px;
-  grid-column: 1 / -1;
 }
 
 .post-content-card {
   background: white;
-  border-radius: 20px;
-  padding: 32px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(241, 245, 249, 0.8);
-  grid-column: 1 / -1;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.post-content-card:hover {
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.12);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  margin-bottom: 20px;
 }
 
 .author-section {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid rgba(241, 245, 249, 0.8);
+  gap: 12px;
+  margin-bottom: 20px;
 }
 
 .author-avatar {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
+  object-fit: cover;
   cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 3px solid transparent;
-  background: linear-gradient(white, white) padding-box,
-              linear-gradient(135deg, #8b5cf6, #ec4899) border-box;
-}
-
-.author-avatar:hover {
-  transform: scale(1.1);
-  box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
 }
 
 .author-info {
@@ -1339,12 +509,10 @@ onMounted(() => {
 }
 
 .author-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
   cursor: pointer;
-  transition: color 0.3s;
 }
 
 .author-name:hover {
@@ -1352,59 +520,52 @@ onMounted(() => {
 }
 
 .post-time {
-  font-size: 14px;
+  font-size: 13px;
   color: #999;
+  margin-top: 2px;
 }
 
 .post-type-tag {
-  margin-right: 8px;
+  margin-bottom: 16px;
 }
 
 .post-text {
   font-size: 16px;
-  line-height: 1.6;
   color: #333;
-}
-
-.post-text :deep(.topic-tag) {
-  color: #0ea5e9;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.3s;
-}
-
-.post-text :deep(.topic-tag):hover {
-  color: #667eea;
-  text-decoration: underline;
+  line-height: 1.8;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .post-images {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12rpx;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
   margin-bottom: 20px;
 }
 
 .post-image {
   width: 100%;
   height: 200px;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .post-tags {
+  display: flex;
+  gap: 8px;
   margin-bottom: 20px;
+  flex-wrap: wrap;
 }
 
 .tag-item {
-  margin-right: 8px;
-  margin-bottom: 8px;
   cursor: pointer;
 }
 
 .post-stats {
   display: flex;
   gap: 24px;
-  padding: 16px 0;
+  padding-top: 16px;
   border-top: 1px solid #f0f0f0;
 }
 
@@ -1412,58 +573,39 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #666;
   font-size: 14px;
+  color: #666;
   cursor: pointer;
-  transition: color 0.3s;
-}
-
-.stat-item:hover,
-.stat-item.active {
-  color: #0ea5e9;
 }
 
 .stat-item.like-btn {
-  transition: all 0.3s;
+  transition: transform 0.2s;
 }
 
-.stat-item.like-btn .heart-icon {
-  font-size: 16px;
-  display: inline-block;
-  transition: transform 0.3s;
+.stat-item.like-btn:active {
+  transform: scale(1.1);
 }
 
 .stat-item.like-btn.active {
-  color: #ef4444;
-}
-
-.stat-item.like-btn.active .heart-icon {
-  transform: scale(1.2);
-  animation: heartbeat 0.3s ease-in-out;
-}
-
-@keyframes heartbeat {
-  0%, 100% { transform: scale(1.2); }
-  50% { transform: scale(1.4); }
+  color: #ff4757;
 }
 
 .comments-section {
   background: white;
-  border-radius: 12px;
-  padding: 32px;
+  border-radius: 16px;
+  padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  grid-column: 1 / -1;
 }
 
 .section-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 24px;
+  margin: 0 0 20px 0;
 }
 
 .comment-input-area {
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .comment-input {
@@ -1471,393 +613,76 @@ onMounted(() => {
 }
 
 .input-actions {
-  text-align: right;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .loading,
 .empty-comments {
-  padding: 40px;
+  padding: 40px 20px;
   text-align: center;
   color: #999;
 }
 
 .comments-list {
-  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .comment-item {
   display: flex;
   gap: 12px;
-  margin-bottom: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.comment-item:last-child {
+  border-bottom: none;
 }
 
 .comment-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-}
-
-.comment-avatar.clickable {
+  object-fit: cover;
   cursor: pointer;
-  transition: opacity 0.3s;
-}
-
-.comment-avatar.clickable:hover {
-  opacity: 0.7;
+  flex-shrink: 0;
 }
 
 .comment-content-wrapper {
   flex: 1;
+  min-width: 0;
 }
 
 .comment-header {
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .comment-user {
   font-size: 14px;
   font-weight: 600;
   color: #333;
-  margin-right: 12px;
-}
-
-.comment-user.clickable {
   cursor: pointer;
-  transition: color 0.3s;
 }
 
-.comment-user.clickable:hover {
+.comment-user:hover {
   color: #0ea5e9;
 }
 
 .comment-time {
-  font-size: 13px;
+  font-size: 12px;
   color: #999;
 }
 
 .comment-text {
-  font-size: 15px;
-  line-height: 1.5;
-  color: #333;
-  margin-bottom: 12px;
-}
-
-.comment-actions {
-  display: flex;
-  gap: 16px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: #666;
-  cursor: pointer;
-  transition: color 0.3s;
-}
-
-.action-btn:hover {
-  color: #0ea5e9;
-}
-
-.action-btn.like-btn .heart-icon {
-  font-size: 14px;
-  display: inline-block;
-  transition: transform 0.3s;
-}
-
-.action-btn.like-btn.active {
-  color: #ef4444;
-}
-
-.action-btn.like-btn.active .heart-icon {
-  transform: scale(1.2);
-}
-
-.action-btn.emoji-btn {
-  font-size: 14px;
-}
-
-/* 表情选择器 */
-.emoji-picker {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  margin-top: 8px;
-  animation: fadeIn 0.2s ease-in-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.emoji-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 10px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 18px;
-  transition: all 0.2s;
-  user-select: none;
-}
-
-.emoji-item:hover {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.emoji-item.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-color: #667eea;
-  color: white;
-}
-
-.emoji-count {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-/* 表情反应显示 */
-.reactions-display {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-.reaction-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 8px;
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.reaction-badge:hover {
-  background: #e0f2fe;
-  transform: scale(1.05);
-}
-
-.reaction-badge-wrapper {
-  position: relative;
-  display: inline-block;
-}
-
-.reaction-users-list {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  margin-bottom: 8px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  min-width: 150px;
-  z-index: 100;
-  animation: fadeIn 0.2s ease-in-out;
-}
-
-.reaction-user-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.reaction-user-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.reaction-user-name {
-  font-size: 13px;
-  color: #333;
-}
-
-.replies-section {
-  background: #f8f9fa;
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 12px;
-}
-
-.reply-item {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.reply-item:last-child {
-  margin-bottom: 0;
-}
-
-.reply-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-}
-
-.reply-avatar.clickable {
-  cursor: pointer;
-  transition: opacity 0.3s;
-}
-
-.reply-avatar.clickable:hover {
-  opacity: 0.7;
-}
-
-.reply-content {
-  flex: 1;
-}
-
-.reply-content-wrapper {
-  flex: 1;
-}
-
-.reply-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.reply-header {
-  margin-bottom: 6px;
-}
-
-.reply-user {
-  font-size: 13px;
-  font-weight: 600;
-  color: #333;
-  margin-right: 8px;
-}
-
-.reply-user.clickable {
-  cursor: pointer;
-  transition: color 0.3s;
-}
-
-.reply-user.clickable:hover {
-  color: #0ea5e9;
-}
-
-.reply-to {
-  font-size: 13px;
-  color: #999;
-}
-
-.reply-time {
-  font-size: 12px;
-  color: #999;
-}
-
-.reply-text {
-  font-size: 14px;
-  line-height: 1.5;
-  color: #666;
-}
-
-.reply-input-area {
-  margin-top: 12px;
-}
-
-.reply-input {
-  margin-bottom: 8px;
-}
-
-.reply-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 8px;
-}
-
-.sidebar {
-  position: sticky;
-  top: 80px;
-  height: fit-content;
-}
-
-.sidebar-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.sidebar-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 16px;
-}
-
-.hot-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.hot-tag {
-  cursor: pointer;
-}
-
-.related-posts {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.related-post-item {
-  padding: 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.3s;
-}
-
-.related-post-item:hover {
-  background: #e9ecef;
-}
-
-.related-post-title {
   font-size: 14px;
   color: #333;
-  line-height: 1.5;
-  margin-bottom: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.related-post-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 12px;
-  color: #999;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

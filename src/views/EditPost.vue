@@ -27,9 +27,9 @@
           <!-- 帖子类型 -->
           <el-form-item label="帖子类型">
             <el-radio-group v-model="form.type">
-              <el-radio-button :label="1">交流</el-radio-button>
-              <el-radio-button :label="2">提问</el-radio-button>
-              <el-radio-button :label="3">分享</el-radio-button>
+              <el-radio-button :value="1">交流</el-radio-button>
+              <el-radio-button :value="2">提问</el-radio-button>
+              <el-radio-button :value="3">分享</el-radio-button>
             </el-radio-group>
           </el-form-item>
 
@@ -77,11 +77,27 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { getPostDetail, updatePost } from '../api/cloud'
 
 const route = useRoute()
 const router = useRouter()
 const saving = ref(false)
 const imageList = ref([])
+
+// 类型映射
+const typeMap = {
+  1: '交流',
+  2: '提问',
+  3: '分享'
+}
+
+// 反向类型映射
+const reverseTypeMap = {
+  '交流': 1,
+  '提问': 2,
+  '分享': 3,
+  'post': 1
+}
 
 // 表单数据
 const form = reactive({
@@ -91,22 +107,46 @@ const form = reactive({
 })
 
 // 加载帖子数据
-const loadPostData = () => {
+const loadPostData = async () => {
   const postId = route.params.id
 
-  // TODO: 调用云函数获取帖子详情
-  // 从 localStorage 读取
-  const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-  const post = allPosts.find(p => p._id === postId)
+  try {
+    const res = await getPostDetail(postId)
 
-  if (post) {
-    form.type = post.type || 1
-    form.content = post.content || ''
-    form.images = post.images || []
-  } else {
-    ElMessage.error('帖子不存在')
-    router.back()
+    if (res.code === 0 && res.data) {
+      const post = res.data
+      form.type = reverseTypeMap[post.type] || 1
+      form.content = post.content || ''
+      form.images = post.images || []
+
+      // 设置图片列表
+      if (post.images && post.images.length > 0) {
+        imageList.value = post.images.map((url, index) => ({
+          name: `image-${index}`,
+          url: url
+        }))
+      }
+    } else {
+      ElMessage.error('帖子不存在')
+      router.back()
+    }
+  } catch (error) {
+    console.error('加载失败:', error)
+    ElMessage.error('加载失败')
   }
+}
+
+// 提取标签
+const extractTags = (content) => {
+  const tagRegex = /#(\S+)/g
+  const tags = []
+  let match
+
+  while ((match = tagRegex.exec(content)) !== null) {
+    tags.push(match[1])
+  }
+
+  return tags
 }
 
 // 保存修改
@@ -119,22 +159,19 @@ const savePost = async () => {
   saving.value = true
 
   try {
-    // TODO: 调用云函数保存修改
-    // 更新 localStorage
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    const postIndex = allPosts.findIndex(p => p._id === route.params.id)
+    const postId = route.params.id
+    const postData = {
+      content: form.content,
+      images: form.images,
+      tags: extractTags(form.content),
+      type: typeMap[form.type]
+    }
 
-    if (postIndex !== -1) {
-      allPosts[postIndex].type = form.type
-      allPosts[postIndex].content = form.content
-      allPosts[postIndex].images = form.images
-      allPosts[postIndex].editedAt = new Date().toISOString()
+    const res = await updatePost(postId, postData)
 
-      localStorage.setItem('posts', JSON.stringify(allPosts))
+    if (res.code === 0) {
       ElMessage.success('保存成功')
-      router.back()
-    } else {
-      ElMessage.error('帖子不存在')
+      router.push('/post/' + postId)
     }
   } catch (error) {
     console.error('保存失败:', error)
@@ -214,10 +251,10 @@ onMounted(() => {
 }
 
 .page-title {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 600;
   color: #333;
-  margin: 0 0 32px 0;
+  margin: 0 0 24px 0;
 }
 
 .edit-form {
@@ -225,8 +262,8 @@ onMounted(() => {
 }
 
 .upload-tip {
-  margin-top: 8px;
-  font-size: 13px;
+  font-size: 12px;
   color: #999;
+  margin-top: 8px;
 }
 </style>

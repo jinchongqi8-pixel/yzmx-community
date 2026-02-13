@@ -9,7 +9,6 @@
           <router-link to="/course" class="nav-link">课程</router-link>
           <router-link to="/topic-square" class="nav-link">话题</router-link>
           <router-link to="/profile" class="nav-link">我的</router-link>
-          <router-link to="/messages" class="nav-link">私信</router-link>
         </div>
       </div>
     </nav>
@@ -21,9 +20,10 @@
         <el-icon><ArrowLeft /></el-icon> 返回
       </el-button>
 
-      <div class="collections-header">
+      <!-- 页面标题 -->
+      <div class="page-header">
         <h2 class="page-title">⭐ 我的收藏</h2>
-        <p class="page-desc">共 {{ collections.length }} 个收藏</p>
+        <p class="page-desc">收藏的精彩内容</p>
       </div>
 
       <!-- 收藏列表 -->
@@ -32,7 +32,7 @@
       </div>
 
       <div v-else-if="collections.length === 0" class="empty">
-        <p>还没有收藏任何帖子</p>
+        <p>还没有收藏任何内容</p>
         <el-button type="primary" @click="$router.push('/community')">
           去逛逛
         </el-button>
@@ -40,89 +40,29 @@
 
       <div v-else class="collections-list">
         <div
-          v-for="post in collections"
-          :key="post._id"
-          class="post-card"
-          @click="goToDetail(post._id)"
+          v-for="item in collections"
+          :key="item.id"
+          class="collection-item"
+          @click="goToPost(item.post_id)"
         >
-          <div class="post-header">
-            <img
-              :src="post.userAvatar || '/default-avatar.png'"
-              class="avatar"
-            />
-            <div class="user-info">
-              <div class="user-name">{{ post.userName || '匿名用户' }}</div>
-              <div class="post-time">{{ formatTime(post.createdAt) }}</div>
+          <div class="collection-post">
+            <div class="post-header">
+              <img
+                :src="item.post_author_avatar || '/default-avatar.png'"
+                class="post-avatar"
+              />
+              <div class="post-info">
+                <span class="post-author">{{ item.post_author_name || '用户' }}</span>
+                <span class="post-time">{{ formatTime(item.created_at) }}</span>
+              </div>
+              <button
+                class="remove-btn"
+                @click.stop="removeCollection(item.id)"
+              >
+                取消收藏
+              </button>
             </div>
-            <el-button
-              @click.stop="removeCollection(post._id)"
-              type="danger"
-              plain
-              size="small"
-              class="remove-btn"
-            >
-              取消收藏
-            </el-button>
-          </div>
-
-          <!-- 帖子类型标签 -->
-          <el-tag
-            v-if="post.type === 1"
-            type="info"
-            effect="plain"
-            size="small"
-            class="post-type-tag"
-          >
-            交流
-          </el-tag>
-          <el-tag
-            v-if="post.type === 2"
-            type="warning"
-            effect="plain"
-            size="small"
-            class="post-type-tag"
-          >
-            提问
-          </el-tag>
-          <el-tag
-            v-if="post.type === 3"
-            type="success"
-            effect="plain"
-            size="small"
-            class="post-type-tag"
-          >
-            分享
-          </el-tag>
-
-          <div class="post-content">{{ post.content }}</div>
-
-          <!-- 帖子图片 -->
-          <div v-if="post.images && post.images.length" class="post-images">
-            <el-image
-              v-for="(img, index) in post.images.slice(0, 3)"
-              :key="index"
-              :src="img"
-              :preview-src-list="post.images"
-              :initial-index="index"
-              fit="cover"
-              class="post-image"
-              :lazy="true"
-            />
-          </div>
-
-          <div class="post-stats">
-            <span class="stat-item">
-              <el-icon><View /></el-icon>
-              {{ post.viewCount || 0 }}
-            </span>
-            <span class="stat-item">
-              <el-icon><ChatDotRound /></el-icon>
-              {{ post.commentCount || 0 }}
-            </span>
-            <span class="stat-item">
-              <el-icon><Star /></el-icon>
-              {{ post.likeCount || 0 }}
-            </span>
+            <div class="post-content">{{ item.post_content?.substring(0, 100) }}...</div>
           </div>
         </div>
       </div>
@@ -133,84 +73,89 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, View, ChatDotRound, Star } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 import { formatTime } from '../utils/formatTime'
 
 const router = useRouter()
+const loading = ref(false)
 const collections = ref([])
-const loading = ref(true)
+
+// 获取当前用户ID
+const getCurrentUserId = () => {
+  return localStorage.getItem('devUserId') || ''
+}
 
 // 加载收藏列表
-const loadCollections = () => {
+const loadCollections = async () => {
+  const userId = getCurrentUserId()
+  if (!userId) {
+    ElMessage.warning('请先登录')
+    return
+  }
+
   loading.value = true
 
   try {
-    // 获取收藏的帖子ID列表
+    // 从 localStorage 读取收藏的帖子ID
     const collectionIds = JSON.parse(localStorage.getItem('collections') || '[]')
 
     if (collectionIds.length === 0) {
       collections.value = []
-      loading.value = false
       return
     }
 
-    // 获取所有帖子
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
+    // 从 Supabase 获取帖子详情
+    const { data: posts } = await Promise.all(
+      collectionIds.map(id =>
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/posts?id=eq.${id}`).then(res => res.json())
+      )
+    )
 
-    // 筛选出收藏的帖子
-    const collectedPosts = allPosts.filter(post => collectionIds.includes(post._id))
-
-    // 按收藏时间倒序排列（ID越大越新）
-    collectedPosts.sort((a, b) => {
-      const aIndex = collectionIds.indexOf(a._id)
-      const bIndex = collectionIds.indexOf(b._id)
-      return aIndex - bIndex
-    })
-
-    collections.value = collectedPosts
+    // 合并数据
+    collections.value = collectionIds
+      .map((id, index) => {
+        const post = posts.find(p => p && p.id === id)
+        return post || {
+          id: id,
+          post_id: id,
+          post_content: post?.content || '',
+          post_author_name: post?.author_name || '用户',
+          post_author_avatar: post?.author_avatar || '',
+          created_at: post?.created_at || new Date().toISOString()
+        }
+      })
+      .filter(item => item.post_content)
   } catch (error) {
     console.error('加载失败:', error)
     ElMessage.error('加载失败')
-    collections.value = []
   } finally {
     loading.value = false
   }
 }
 
 // 取消收藏
-const removeCollection = async (postId) => {
+const removeCollection = async (collectionId) => {
   try {
-    await ElMessageBox.confirm(
-      '确定要取消收藏吗？',
-      '提示',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-
-    // 更新收藏列表
-    const collectionIds = JSON.parse(localStorage.getItem('collections') || '[]')
-    const index = collectionIds.indexOf(postId)
-
+    const collections = JSON.parse(localStorage.getItem('collections') || '[]')
+    const index = collections.indexOf(collectionId)
     if (index !== -1) {
-      collectionIds.splice(index, 1)
-      localStorage.setItem('collections', JSON.stringify(collectionIds))
+      collections.splice(index, 1)
+      localStorage.setItem('collections', JSON.stringify(collections))
+
+      // 从列表中移除
+      collections.value = collections.value.filter(c => c.id !== collectionId)
+
+      ElMessage.success('已取消收藏')
     }
-
-    // 重新加载列表
-    await loadCollections()
-
-    ElMessage.success('已取消收藏')
   } catch (error) {
-    // 用户取消
+    console.error('操作失败:', error)
+    ElMessage.error('操作失败')
   }
 }
 
-// 查看详情
-const goToDetail = (postId) => {
+// 跳转到帖子
+const goToPost = (postId) => {
   router.push(`/post/${postId}`)
 }
 
@@ -222,14 +167,12 @@ onMounted(() => {
 <style scoped>
 .collections-container {
   min-height: 100vh;
-  background: linear-gradient(to bottom, #f0f4f8 0%, #ffffff 100%);
+  background: #f5f5f5;
 }
 
 .navbar {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  border-bottom: 1px solid #e8ecef;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -246,46 +189,26 @@ onMounted(() => {
 }
 
 .logo {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 600;
   color: #0ea5e9;
-  letter-spacing: -0.5px;
 }
 
 .nav-links {
   display: flex;
-  gap: 32px;
+  gap: 30px;
 }
 
 .nav-link {
-  color: #64748b;
+  color: #666;
   text-decoration: none;
-  font-size: 15px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  position: relative;
-}
-
-.nav-link::after {
-  content: '';
-  position: absolute;
-  bottom: -20px;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: #0ea5e9;
-  transform: scaleX(0);
-  transition: transform 0.3s ease;
+  font-size: 16px;
+  transition: color 0.3s;
 }
 
 .nav-link:hover,
 .nav-link.router-link-active {
   color: #0ea5e9;
-}
-
-.nav-link:hover::after,
-.nav-link.router-link-active::after {
-  transform: scaleX(1);
 }
 
 .main-content {
@@ -298,21 +221,21 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.collections-header {
-  margin-bottom: 20px;
+.page-header {
+  text-align: center;
+  margin-bottom: 24px;
 }
 
 .page-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 8px;
-  letter-spacing: -0.5px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px;
 }
 
 .page-desc {
-  font-size: 14px;
   color: #999;
+  margin: 0;
 }
 
 .loading,
@@ -322,56 +245,49 @@ onMounted(() => {
   color: #999;
 }
 
-.empty p {
-  margin-bottom: 20px;
-}
-
 .collections-list {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.collection-item {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
   gap: 16px;
 }
 
-.post-card {
-  background: white;
-  border-radius: 16px;
-  padding: 20px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.post-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  border-color: #e2e8f0;
+.collection-post {
+  flex: 1;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
 }
 
 .post-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  position: relative;
+  margin-bottom: 8px;
 }
 
-.avatar {
-  width: 40px;
-  height: 40px;
+.post-avatar {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  margin-right: 12px;
   object-fit: cover;
 }
 
-.user-info {
+.post-info {
   flex: 1;
 }
 
-.user-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 4px;
+.post-author {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
 }
 
 .post-time {
@@ -380,45 +296,18 @@ onMounted(() => {
 }
 
 .remove-btn {
-  flex-shrink: 0;
-}
-
-.post-type-tag {
-  margin-bottom: 12px;
+  padding: 4px 12px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
 }
 
 .post-content {
-  font-size: 15px;
-  color: #334155;
-  line-height: 1.7;
-  margin-bottom: 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.post-images {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.post-image {
-  width: 100px;
-  height: 100px;
-  border-radius: 8px;
-  object-fit: cover;
-}
-
-.post-stats {
-  display: flex;
-  gap: 20px;
-  color: #999;
-  font-size: 13px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
 }
 </style>
