@@ -359,14 +359,17 @@ export async function createComment(data) {
 
   if (error) throw error
 
-  // 尝试更新帖子评论数（忽略错误）
+  // 更新帖子评论数
   try {
-    // 先获取当前评论数
+    await supabase.rpc('increment_comment_count', { post_id: data.postId })
+  } catch (e) {
+    console.warn('RPC 调用失败，尝试直接更新:', e)
+    // 降级处理：直接更新
     const { data: post } = await supabase
       .from(TABLES.POSTS)
       .select('comment_count')
       .eq('id', data.postId)
-      .single()
+      .maybeSingle()
 
     if (post) {
       await supabase
@@ -374,8 +377,6 @@ export async function createComment(data) {
         .update({ comment_count: (post.comment_count || 0) + 1 })
         .eq('id', data.postId)
     }
-  } catch (e) {
-    console.warn('更新评论数失败:', e)
   }
 
   return {
@@ -432,8 +433,11 @@ export async function toggleLike(postId) {
       .eq('user_id', userId)
       .eq('post_id', postId)
 
-    // 减少点赞数（忽略错误）
+    // 减少点赞数
     try {
+      await supabase.rpc('decrement_like_count', { post_id: postId })
+    } catch (e) {
+      console.warn('RPC 调用失败，尝试直接更新:', e)
       const { data: post } = await supabase
         .from(TABLES.POSTS)
         .select('like_count')
@@ -446,8 +450,6 @@ export async function toggleLike(postId) {
           .update({ like_count: Math.max(0, (post.like_count || 0) - 1) })
           .eq('id', postId)
       }
-    } catch (e) {
-      console.warn('更新点赞数失败:', e)
     }
 
     return {
@@ -463,8 +465,11 @@ export async function toggleLike(postId) {
         post_id: postId
       })
 
-    // 增加点赞数（忽略错误）
+    // 增加点赞数
     try {
+      await supabase.rpc('increment_like_count', { post_id: postId })
+    } catch (e) {
+      console.warn('RPC 调用失败，尝试直接更新:', e)
       const { data: post } = await supabase
         .from(TABLES.POSTS)
         .select('like_count')
@@ -477,8 +482,6 @@ export async function toggleLike(postId) {
           .update({ like_count: (post.like_count || 0) + 1 })
           .eq('id', postId)
       }
-    } catch (e) {
-      console.warn('更新点赞数失败:', e)
     }
 
     return {
