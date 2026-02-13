@@ -297,17 +297,43 @@ export async function deletePost(postId) {
  * @param {string} postId - 帖子ID
  */
 export async function getCommentList(postId) {
-  const { data, error } = await supabase
+  // 获取评论（不使用外键关联，避免 PGRST200 错误）
+  const { data: comments, error } = await supabase
     .from(TABLES.COMMENTS)
-    .select('*, profiles(*)')
+    .select('*')
     .eq('post_id', postId)
     .order('created_at', { ascending: true })
 
   if (error) throw error
 
+  // 如果有评论，单独获取作者信息
+  if (comments && comments.length > 0) {
+    const authorIds = [...new Set(comments.map(c => c.author_id).filter(Boolean))]
+    const { data: profiles } = await supabase
+      .from(TABLES.PROFILES)
+      .select('id, nickname, avatar')
+      .in('id', authorIds)
+
+    const profileMap = (profiles || []).reduce((map, p) => {
+      map[p.id] = p
+      return map
+    }, {})
+
+    // 将 profile 信息附加到评论上
+    const commentsWithProfiles = comments.map(comment => ({
+      ...comment,
+      profiles: profileMap[comment.author_id] || { nickname: '匿名用户', avatar: '' }
+    }))
+
+    return {
+      code: 0,
+      data: commentsWithProfiles
+    }
+  }
+
   return {
     code: 0,
-    data: data || []
+    data: []
   }
 }
 
@@ -446,14 +472,28 @@ export async function getLikedPosts() {
 
   const { data, error } = await supabase
     .from(TABLES.LIKES)
-    .select(`post_id, ${TABLES.POSTS}(*)`)
+    .select(`post_id`)
     .eq('user_id', userId)
 
   if (error) throw error
 
+  // 单独获取帖子信息
+  if (data && data.length > 0) {
+    const postIds = data.map(item => item.post_id)
+    const { data: posts } = await supabase
+      .from(TABLES.POSTS)
+      .select('*')
+      .in('id', postIds)
+
+    return {
+      code: 0,
+      data: posts || []
+    }
+  }
+
   return {
     code: 0,
-    data: data?.map(item => item.posts).filter(Boolean) || []
+    data: []
   }
 }
 
@@ -632,14 +672,28 @@ export async function toggleFollow(followingId) {
 export async function getFollowingList(userId) {
   const { data, error } = await supabase
     .from(TABLES.FOLLOWS)
-    .select(`following_id, profiles(*)`)
+    .select(`following_id`)
     .eq('follower_id', userId)
 
   if (error) throw error
 
+  // 单独获取关注的用户信息
+  if (data && data.length > 0) {
+    const followingIds = data.map(f => f.following_id)
+    const { data: profiles } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .in('id', followingIds)
+
+    return {
+      code: 0,
+      data: profiles || []
+    }
+  }
+
   return {
     code: 0,
-    data: data?.map(item => item.profiles).filter(Boolean) || []
+    data: []
   }
 }
 
@@ -649,14 +703,28 @@ export async function getFollowingList(userId) {
 export async function getFollowerList(userId) {
   const { data, error } = await supabase
     .from(TABLES.FOLLOWS)
-    .select(`follower_id, profiles(*)`)
+    .select(`follower_id`)
     .eq('following_id', userId)
 
   if (error) throw error
 
+  // 单独获取粉丝的用户信息
+  if (data && data.length > 0) {
+    const followerIds = data.map(f => f.follower_id)
+    const { data: profiles } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .in('id', followerIds)
+
+    return {
+      code: 0,
+      data: profiles || []
+    }
+  }
+
   return {
     code: 0,
-    data: data?.map(item => item.profiles).filter(Boolean) || []
+    data: []
   }
 }
 
