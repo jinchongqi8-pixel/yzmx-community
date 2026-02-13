@@ -2,13 +2,28 @@
 export const formatTime = (timestamp) => {
   if (!timestamp) return '刚刚'
 
-  // 如果是字符串且已经是格式化好的时间，直接返回
-  if (typeof timestamp === 'string' && !timestamp.match(/^\d+$/)) {
-    return timestamp
+  let time
+
+  // 处理 ISO 8601 格式字符串 (Supabase 返回格式)
+  if (typeof timestamp === 'string') {
+    // 如果包含日期分隔符或 T (ISO 格式)，解析为日期
+    if (timestamp.includes('-') || timestamp.includes('T')) {
+      time = new Date(timestamp).getTime()
+    } else if (timestamp.match(/^\d+$/)) {
+      // 纯数字字符串
+      time = parseInt(timestamp)
+    } else {
+      // 其他格式，尝试直接解析
+      time = new Date(timestamp).getTime()
+    }
+  } else {
+    // 已经是数字或 Date 对象
+    time = timestamp instanceof Date ? timestamp.getTime() : timestamp
   }
 
-  // 转换为数字（如果是字符串）
-  const time = typeof timestamp === 'string' ? parseInt(timestamp) : timestamp
+  // 如果解析失败，返回原始值
+  if (isNaN(time)) return timestamp
+
   const now = Date.now()
   const diff = now - time
 

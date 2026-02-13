@@ -234,7 +234,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Search, ChatDotRound, Loading } from '@element-plus/icons-vue'
-import { getPostList, toggleLike, checkLike, toggleFollow } from '../api/cloud'
+import { getPostList, toggleLike as toggleLikeApi, checkLike, toggleFollow as toggleFollowApi } from '../api/cloud'
 import { formatTime } from '../utils/formatTime'
 import WelcomeBanner from '../components/WelcomeBanner.vue'
 import AnnouncementBanner from '../components/AnnouncementBanner.vue'
@@ -328,9 +328,9 @@ const loadMore = async () => {
 }
 
 // 点赞/取消点赞
-const toggleLikePost = async (post) => {
+const toggleLike = async (post) => {
   try {
-    const res = await toggleLike(post.id)
+    const res = await toggleLikeApi(post.id)
     if (res.code === 0) {
       if (res.data.liked) {
         likedPosts.value.add(post.id)
@@ -342,14 +342,15 @@ const toggleLikePost = async (post) => {
     }
   } catch (error) {
     console.error('点赞失败:', error)
+    ElMessage.error('操作失败，请重试')
   }
 }
 
 // 关注/取消关注
-const toggleFollowUser = async (userId) => {
+const toggleFollow = async (userId) => {
   followLoading.value[userId] = true
   try {
-    const res = await toggleFollow(userId)
+    const res = await toggleFollowApi(userId)
     if (res.code === 0) {
       if (res.data.following) {
         followingUsers.value.add(userId)

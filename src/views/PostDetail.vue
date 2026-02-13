@@ -529,59 +529,6 @@ const loadPostDetail = async () => {
       }
     }
 
-    if (postIndex === -1) {
-      ElMessage.error('帖子不存在')
-      router.back()
-      return
-    }
-
-    const postData = allPosts[postIndex]
-    post.value = postData
-
-    // 更新统计数据
-    likeCount.value = postData.likeCount || 0
-    viewCount.value = postData.viewCount || 0
-    commentCount.value = postData.commentCount || 0
-
-    // 获取当前用户
-    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-
-    // ✅ 检查是否已浏览过（每个用户只计算一次）
-    if (userInfo._id) {
-      // 初始化 viewedBy 数组
-      if (!postData.viewedBy) {
-        postData.viewedBy = []
-      }
-
-      // 如果用户还没浏览过这个帖子，增加浏览次数
-      if (!postData.viewedBy.includes(userInfo._id)) {
-        postData.viewedBy.push(userInfo._id)
-        postData.viewCount = (postData.viewCount || 0) + 1
-        viewCount.value = postData.viewCount
-
-        // 保存更新后的帖子数据
-        allPosts[postIndex] = postData
-        localStorage.setItem('posts', JSON.stringify(allPosts))
-
-        console.log(`✅ 用户 ${userInfo.nickname} 首次浏览，浏览次数 +1`)
-      } else {
-        console.log(`ℹ️ 用户 ${userInfo.nickname} 已浏览过，不累加`)
-      }
-    }
-
-    // 检查是否已点赞
-    const postLikedBy = postData.likedBy || []
-    isLiked.value = userInfo._id ? postLikedBy.includes(userInfo._id) : false
-
-    // 记录浏览历史（加try-catch保护）
-    try {
-      if (userInfo._id) {
-        addToHistory(postData, userInfo)
-      }
-    } catch (historyError) {
-      console.error('记录历史失败:', historyError)
-    }
-
     // 检查是否已收藏
     try {
       const collections = JSON.parse(localStorage.getItem('collections') || '[]')
@@ -603,11 +550,24 @@ const loadPostDetail = async () => {
 // 加载评论列表
 const loadComments = async () => {
   try {
-    // 从帖子中获取评论
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    const postData = allPosts.find(p => p._id === route.params.id)
-    if (postData && postData.comments) {
-      comments.value = postData.comments
+    const postId = route.params.id
+    const res = await getCommentList(postId)
+
+    if (res.code === 0 && res.data) {
+      // 转换 Supabase 数据格式到组件使用的格式
+      comments.value = res.data.map(comment => ({
+        _id: comment.id,
+        id: comment.id,
+        userName: comment.profiles?.nickname || '匿名用户',
+        userAvatar: comment.profiles?.avatar || '',
+        commentContent: comment.content,
+        userId: comment.author_id,
+        createdAt: comment.created_at,
+        likeCount: comment.like_count || 0,
+        likedBy: comment.liked_by || [],
+        replies: []
+      }))
+      commentCount.value = comments.value.length
     } else {
       comments.value = []
     }
@@ -618,50 +578,34 @@ const loadComments = async () => {
 
 // 点赞帖子
 const handleLike = async () => {
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id) {
+  const userId = getCurrentUserId()
+  if (!userId) {
     ElMessage.warning('请先登录')
     return
   }
 
-  const postId = route.params.id
-  const postLikedBy = post.value.likedBy || []
+  try {
+    const postId = route.params.id
+    const res = await toggleLike(postId)
 
-  if (postLikedBy.includes(userInfo._id)) {
-    // 取消点赞
-    const newLikedBy = postLikedBy.filter(id => id !== userInfo._id)
-    post.value.likedBy = newLikedBy
-    post.value.likeCount = Math.max(0, (post.value.likeCount || 0) - 1)
-    isLiked.value = false
-    likeCount.value = post.value.likeCount  // 更新显示的点赞数
-    ElMessage.success('已取消点赞')
-  } else {
-    // 点赞
-    post.value.likedBy.push(userInfo._id)
-    post.value.likeCount = (post.value.likeCount || 0) + 1
-    isLiked.value = true
-    likeCount.value = post.value.likeCount  // 更新显示的点赞数
-    ElMessage.success('已点赞')
+    if (res.code === 0) {
+      const liked = res.data.liked
+      isLiked.value = liked
 
-    // 创建点赞通知（如果点赞的不是作者自己）
-    if (post.value.userId !== userInfo._id) {
-      createLikeNotification(userInfo, post.value, post.value.userId)
-      // 更新未读通知数
-      if (window.updateNotificationBadge) {
-        window.updateNotificationBadge()
+      // 更新点赞数
+      if (liked) {
+        likeCount.value = (post.value.like_count || 0) + 1
+        post.value.like_count = likeCount.value
+        ElMessage.success('已点赞')
+      } else {
+        likeCount.value = Math.max(0, (post.value.like_count || 1) - 1)
+        post.value.like_count = likeCount.value
+        ElMessage.success('已取消点赞')
       }
     }
-  }
-
-  // 强制触发响应式更新
-  post.value = { ...post.value }
-
-  // 保存到localStorage
-  const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-  const postIndex = allPosts.findIndex(p => p._id === postId)
-  if (postIndex !== -1) {
-    allPosts[postIndex] = post.value
-    localStorage.setItem('posts', JSON.stringify(allPosts))
+  } catch (error) {
+    console.error('点赞失败:', error)
+    ElMessage.error('操作失败，请重试')
   }
 }
 
@@ -712,77 +656,46 @@ const submitComment = async () => {
     return
   }
 
-  const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}')
-  if (!userInfo._id) {
+  const userId = getCurrentUserId()
+  if (!userId) {
     ElMessage.warning('请先登录')
     return
   }
 
   try {
     const postId = route.params.id
-    const newComment = {
-      _id: `comment_${Date.now()}`,
-      userName: userInfo.nickname || '我',
-      userAvatar: userInfo.avatar || '',
-      commentContent: commentContent.value,
-      userId: userInfo._id,
-      createdAt: Date.now(),
-      likeCount: 0,
-      replies: []
-    }
+    const res = await createComment({
+      postId: postId,
+      content: commentContent.value
+    })
 
-    // 添加到评论列表
-    comments.value.unshift(newComment)
-    commentCount.value++
+    if (res.code === 0 && res.data) {
+      // 获取用户信息
+      const userInfo = getCurrentUser()
 
-    // 更新 post.value
-    if (!post.value.comments) {
-      post.value.comments = []
-    }
-    post.value.comments.unshift(newComment)
-    post.value.commentCount = comments.value.length
-
-    // 更新 localStorage 中的帖子数据
-    const allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    const postIndex = allPosts.findIndex(p => p._id === postId)
-    if (postIndex !== -1) {
-      allPosts[postIndex].comments = post.value.comments
-      allPosts[postIndex].commentCount = post.value.commentCount
-      localStorage.setItem('posts', JSON.stringify(allPosts))
-    }
-
-    // ✅ 检测@提醒
-    const mentions = extractMentions(commentContent.value)
-    if (mentions.length > 0) {
-      // 获取所有用户
-      const users = JSON.parse(localStorage.getItem('users') || '[]')
-
-      // 遍历每个@用户
-      mentions.forEach(mentionName => {
-        // 根据昵称查找用户
-        const mentionedUser = users.find(u => u.nickname === mentionName)
-
-        if (mentionedUser && mentionedUser._id !== userInfo._id) {
-          // 发送@提醒通知
-          createMentionNotification(userInfo, mentionedUser, post.value, commentContent.value)
-        }
-      })
-    }
-
-    commentContent.value = ''
-    ElMessage.success('评论成功')
-
-    // 创建评论通知（如果评论的不是作者自己）
-    if (post.value.userId !== userInfo._id) {
-      createCommentNotification(userInfo, post.value, commentContent.value, post.value.userId)
-      // 更新未读通知数
-      if (window.updateNotificationBadge) {
-        window.updateNotificationBadge()
+      // 添加新评论到列表
+      const newComment = {
+        _id: res.data.id,
+        id: res.data.id,
+        userName: userInfo?.nickname || '我',
+        userAvatar: userInfo?.avatar || '',
+        commentContent: commentContent.value,
+        userId: userId,
+        createdAt: res.data.created_at || Date.now(),
+        likeCount: 0,
+        replies: []
       }
+
+      comments.value.unshift(newComment)
+      commentCount.value++
+      post.value.comment_count = commentCount.value
+
+      commentContent.value = ''
+      ElMessage.success('评论成功')
     }
   } catch (error) {
     console.error('评论失败:', error)
-    ElMessage.error('评论失败')
+    ElMessage.error('评论失败，请重试')
   }
 }
 
