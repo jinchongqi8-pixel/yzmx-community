@@ -158,6 +158,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
 import AnnouncementBanner from '../components/AnnouncementBanner.vue'
+import { supabase, TABLES } from '../supabase/client'
 
 const router = useRouter()
 const userInfo = ref(null)
@@ -165,6 +166,11 @@ const adminCode = ref('')
 
 // 管理员验证码
 const ADMIN_SECRET_CODE = 'admin123'
+
+// 获取当前用户ID
+const getCurrentUserId = () => {
+  return localStorage.getItem('devUserId') || ''
+}
 
 // 检查当前用户是否可以成为管理员（例如特定手机号）
 const canBeAdmin = computed(() => {
@@ -183,84 +189,10 @@ const debugInfo = ref({
 })
 
 // 加载用户信息
-const loadUserInfo = () => {
-  const info = localStorage.getItem('userInfo')
+const loadUserInfo = async () => {
+  const userId = getCurrentUserId()
 
-  if (info) {
-    userInfo.value = JSON.parse(info)
-
-    // 更新调试信息
-    debugInfo.value.userId = userInfo.value._id || '无ID'
-    debugInfo.value.nickname = userInfo.value.nickname || '无昵称'
-
-    // 计算实际的帖子数量和点赞数
-    let allPosts = JSON.parse(localStorage.getItem('posts') || '[]')
-    debugInfo.value.totalPosts = allPosts.length
-
-    // 第一步：尝试用 userId 匹配
-    let myPosts = allPosts.filter(p => p.userId === userInfo.value._id)
-
-    // 第二步：如果找不到，尝试用手机号匹配
-    if (myPosts.length === 0 && userInfo.value.phone) {
-      const phoneUserId = 'user_' + userInfo.value.phone
-      myPosts = allPosts.filter(p => p.userId === phoneUserId)
-
-      // 如果找到了，更新这些帖子的 userId
-      if (myPosts.length > 0) {
-        allPosts = allPosts.map(p => {
-          if (!p.userId || p.userId === phoneUserId) {
-            return { ...p, userId: userInfo.value._id }
-          }
-          return p
-        })
-        // 保存更新后的帖子
-        localStorage.setItem('posts', JSON.stringify(allPosts))
-      }
-    }
-
-    // 第三步：如果还是找不到，尝试用昵称匹配（兼容最老的数据）
-    if (myPosts.length === 0) {
-      myPosts = allPosts.filter(p =>
-        p.userName === userInfo.value.nickname ||
-        p.userName === '我' ||
-        !p.userId
-      )
-
-      // 更新这些帖子的 userId
-      if (myPosts.length > 0) {
-        allPosts = allPosts.map(p => {
-          if (myPosts.includes(p)) {
-            return { ...p, userId: userInfo.value._id }
-          }
-          return p
-        })
-        localStorage.setItem('posts', JSON.stringify(allPosts))
-      }
-    }
-
-    debugInfo.value.myPostsCount = myPosts.length
-
-    // 更新帖子数量
-    userInfo.value.postsCount = myPosts.length
-    debugInfo.value.calculatedCount = myPosts.length
-
-    // 计算总点赞数（遍历所有帖子，累加点赞数）
-    const totalLikes = myPosts.reduce((sum, post) => {
-      // 点赞数可能是 post.likes 或 post.likeCount
-      const postLikes = post.likes || post.likeCount || 0
-      return sum + postLikes
-    }, 0)
-
-    userInfo.value.likesCount = totalLikes
-
-    // 计算粉丝和关注数量
-    const follows = JSON.parse(localStorage.getItem('follows') || '[]')
-    const followersCount = follows.filter(f => f.followingId === userInfo.value._id).length
-    const followingCount = follows.filter(f => f.userId === userInfo.value._id).length
-
-    userInfo.value.followersCount = followersCount
-    userInfo.value.followingCount = followingCount
-  } else {
+  if (!userId) {
     // 如果没有用户信息，设置默认值
     userInfo.value = {
       nickname: '未登录',
@@ -271,6 +203,84 @@ const loadUserInfo = () => {
       likesCount: 0,
       checkInDays: 0
     }
+    return
+  }
+
+  try {
+    // 从 Supabase 获取用户 profile
+    const { data: profile } = await supabase
+      .from(TABLES.PROFILES)
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (!profile) {
+      userInfo.value = {
+        nickname: '未登录',
+        avatar: '',
+        coins: 0,
+        level: 1,
+        postsCount: 0,
+        likesCount: 0,
+        checkInDays: 0
+      }
+      return
+    }
+
+    // 获取用户的帖子数量
+    const { data: posts, count } = await supabase
+      .from(TABLES.POSTS)
+      .select('*', { count: 'exact', head: true })
+      .eq('author_id', userId)
+
+    // 计算总点赞数
+    const { data: userPosts } = await supabase
+      .from(TABLES.POSTS)
+      .select('like_count')
+      .eq('author_id', userId)
+
+    const totalLikes = (userPosts || []).reduce((sum, post) => {
+      return sum + (post.like_count || 0)
+    }, 0)
+
+    // 计算粉丝和关注数量
+    const { count: followersCount } = await supabase
+      .from(TABLES.FOLLOWS)
+      .select('*', { count: 'exact', head: true })
+      .eq('following_id', userId)
+
+    const { count: followingCount } = await supabase
+      .from(TABLES.FOLLOWS)
+      .select('*', { count: 'exact', head: true })
+      .eq('follower_id', userId)
+
+    // 更新用户信息
+    userInfo.value = {
+      _id: profile.id,
+      nickname: profile.nickname || '未命名',
+      phone: profile.phone,
+      avatar: profile.avatar || '',
+      coins: profile.gold_count || 0,
+      level: profile.level || 1,
+      postsCount: count || 0,
+      likesCount: totalLikes || 0,
+      checkInDays: profile.check_in_days || 0,
+      followersCount: followersCount || 0,
+      followingCount: followingCount || 0,
+      isAdmin: profile.is_admin || false
+    }
+
+    // 更新调试信息
+    debugInfo.value.userId = userId
+    debugInfo.value.nickname = profile.nickname || '无昵称'
+    debugInfo.value.totalPosts = count || 0
+    debugInfo.value.myPostsCount = count || 0
+    debugInfo.value.calculatedCount = count || 0
+
+    // 同步到 localStorage
+    localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
+  } catch (error) {
+    console.error('加载用户信息失败:', error)
   }
 }
 
