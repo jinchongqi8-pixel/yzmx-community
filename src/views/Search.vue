@@ -23,7 +23,7 @@
           clearable
           @input="handleSearch"
           @clear="clearSearch"
-        >
+        />
         <el-button type="primary" @click="doSearch">搜索</el-button>
       </div>
 
