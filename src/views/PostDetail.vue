@@ -394,6 +394,18 @@ import {
   extractMentions
 } from '../utils/notification'
 import { formatTime } from '../utils/formatTime'
+import {
+  getPostDetail,
+  toggleLike,
+  checkLike,
+  getCommentList,
+  createComment,
+  deleteComment,
+  toggleFollow,
+  getFollowingList,
+  getUserProfile
+} from '../api/cloud'
+import { supabase, TABLES } from '../supabase/client'
 
 const route = useRoute()
 const router = useRouter()
@@ -423,6 +435,11 @@ const replyToCommentId = ref(null)
 const replyToReplyId = ref(null) // 新增：追踪回复的是哪个回复
 const expandedReplies = ref(new Set()) // 存储展开的评论ID
 const showReactionUsersMap = ref({}) // 存储显示表情用户的映射 {commentId_emoji: boolean}
+
+// 获取当前用户ID
+const getCurrentUserId = () => {
+  return localStorage.getItem('devUserId') || ''
+}
 
 // 获取当前用户
 const getCurrentUser = () => {
